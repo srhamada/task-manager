@@ -998,6 +998,7 @@
               <th>タイトル</th>
               <th>担当者</th>
               <th>期限日</th>
+              <th>作業時間</th>
             </tr>
           </thead>
           <tbody id="done-tbody"></tbody>
@@ -2482,6 +2483,7 @@
       var asgn    = ASSIGNEE_LABEL[t.assignee] || t.assignee || '—';
       var recDate = t.recordDate ? t.recordDate.replace(/-/g, '/') : '—';
       var dueDate = t.due        ? t.due.replace(/-/g, '/')        : '—';
+      var timeRange = formatWorkTimeRange(t.workStart, t.workEnd, t.workMinutes);
       var tr = document.createElement('tr');
       tr.innerHTML =
         '<td>' + esc(recDate) + '</td>' +
@@ -2489,7 +2491,8 @@
         '<td>' + esc(t.category || '—') + '</td>' +
         '<td>' + esc(t.text) + '</td>' +
         '<td>' + esc(asgn) + '</td>' +
-        '<td>' + esc(dueDate) + '</td>';
+        '<td>' + esc(dueDate) + '</td>' +
+        '<td style="white-space:nowrap;">' + (timeRange ? esc(timeRange) : '—') + '</td>';
       tbody.appendChild(tr);
     });
   }
@@ -2528,8 +2531,7 @@
     tbody.innerHTML = filtered.map(function(t) {
       var asgn    = ASSIGNEE_LABEL[t.assignee] || t.assignee || '—';
       var recDate = t.recordDate ? t.recordDate.replace(/-/g, '/') : '—';
-      var timeStr = t.workStart && t.workEnd ? t.workStart + '〜' + t.workEnd : '';
-      var minsStr = t.workMinutes ? minsToLabel(t.workMinutes) : '—';
+      var timeRange = formatWorkTimeRange(t.workStart, t.workEnd, t.workMinutes);
       return '<tr>' +
         '<td>' + esc(recDate) + '</td>' +
         '<td><strong>' + esc(t.client || '—') + '</strong></td>' +
@@ -2537,8 +2539,7 @@
         '<td>' + esc(t.text) + '</td>' +
         '<td>' + esc(asgn) + '</td>' +
         '<td style="white-space:nowrap;">' +
-          (timeStr ? '<span style="font-size:0.78rem;color:#9e9e9e;">' + esc(timeStr) + '</span><br>' : '') +
-          '<strong>' + minsStr + '</strong>' +
+          (timeRange ? esc(timeRange) : '—') +
         '</td>' +
         '</tr>';
     }).join('');
@@ -3755,6 +3756,43 @@
     if (h > 0 && r > 0) return h + '時間' + r + '分';
     if (h > 0)          return h + '時間';
     return r + '分';
+  }
+
+  // ISO時刻文字列やDate値を HH:mm 形式に変換
+  // 例: "1899-12-30T11:30:00.000Z" → "11:30", "12:00" → "12:00"
+  function formatTime(val) {
+    if (!val) return '';
+    var s = String(val);
+    // 既に HH:mm 形式ならそのまま
+    if (/^\d{1,2}:\d{2}$/.test(s)) return s;
+    // ISO文字列（1899-12-30T...Z など）→ 時:分 を抽出
+    var m = s.match(/T(\d{2}):(\d{2})/);
+    if (m) return m[1] + ':' + m[2];
+    // Date型が文字列化されたケース
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
+    return s;
+  }
+
+  // 開始〜終了（作業時間）形式の文字列を生成
+  function formatWorkTimeRange(start, end, minutes) {
+    var s = formatTime(start);
+    var e = formatTime(end);
+    if (!s && !e) return minutes ? minsToLabel(minutes) : '';
+    var range = '';
+    if (s && e) {
+      range = s + '〜' + e;
+    } else if (s) {
+      range = s + '〜';
+    } else {
+      range = '〜' + e;
+    }
+    // 作業時間があれば併記
+    var mLabel = minsToLabel(minutes);
+    if (mLabel) range += '（' + mLabel + '）';
+    return range;
   }
 
   // 開始・終了時間から分を自動計算してフィールドに反映

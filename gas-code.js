@@ -135,10 +135,11 @@ function handleCompleteTodo_(ss, data) {
     todoSheet.getRange(rowNum, statusCol + 1).setValue('完了');
   }
 
-  // 更新日もセット
+  // 更新日もセット（JST）
   var updatedCol = headers.indexOf('更新日');
+  var todoNowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
   if (updatedCol !== -1) {
-    todoSheet.getRange(rowNum, updatedCol + 1).setValue(new Date());
+    todoSheet.getRange(rowNum, updatedCol + 1).setValue(todoNowJST);
   }
 
   // --- 最新の行データを取得 ---
@@ -179,6 +180,7 @@ function handleCompleteTodo_(ss, data) {
     var workMinutes = convertToMinutes_(tv('作業時間'));
     var newId = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMddHHmmss');
 
+    var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
     var payrollRow = [
       newId,                 // A: ID
       tv('ID'),              // B: 元タスクID
@@ -186,7 +188,7 @@ function handleCompleteTodo_(ss, data) {
       payrollMonth,          // D: 給与対象月
       tv('タスク内容'),      // E
       tv('担当者'),          // F
-      new Date(),            // G: 完了日
+      nowJST,                // G: 完了日（JST）
       workMinutes,           // H: 作業時間（分）
       '',                    // I: 人数（空欄）
       '',                    // J: メモ（空欄）
@@ -200,6 +202,7 @@ function handleCompleteTodo_(ss, data) {
 
   } else {
     // --- 記録シートへ保存 ---
+    var nowJST2 = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
     var recordRow = [
       tv('ID'),             // A: ID
       tv('クライアント'),    // B
@@ -210,8 +213,8 @@ function handleCompleteTodo_(ss, data) {
       tv('状態'),            // G（完了）
       tv('優先度'),          // H
       tv('作成日'),          // I
-      tv('更新日'),          // J
-      new Date(),            // K: 完了日時
+      nowJST2,               // J: 更新日（JST）
+      nowJST2,               // K: 完了日時（JST）
       tv('開始時刻'),        // L
       tv('終了時刻'),        // M
       tv('作業時間'),        // N
@@ -224,9 +227,9 @@ function handleCompleteTodo_(ss, data) {
 
   // --- 記録済に日時を入れる ---
   if (recordedCol !== -1) {
-    var now = new Date();
-    todoSheet.getRange(rowNum, recordedCol + 1).setValue(now);
-    Logger.log('[completeTodo] TODO行' + rowNum + ' 記録済に日時セット: ' + now);
+    var recordedNowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+    todoSheet.getRange(rowNum, recordedCol + 1).setValue(recordedNowJST);
+    Logger.log('[completeTodo] TODO行' + rowNum + ' 記録済に日時セット: ' + recordedNowJST);
   }
 
   Logger.log('[completeTodo] 完了処理 すべて成功');
@@ -262,10 +265,11 @@ function handleUpdateRow_(ss, data) {
         var colName = headers[j];
         // ID・作成日・記録済は変更しない
         if (colName === 'ID' || colName === '作成日' || colName === '記録済') continue;
-        // 更新日はGAS側の現在日時を強制使用（ブラウザの値は無視）
+        // 更新日はGAS側の現在日時（JST）を強制使用（ブラウザの値は無視）
         if (colName === '更新日') {
-          sheet.getRange(rowNum, j + 1).setValue(new Date());
-          Logger.log('[updateRow] 更新日をGAS側 new Date() でセット');
+          var updateNowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+          sheet.getRange(rowNum, j + 1).setValue(updateNowJST);
+          Logger.log('[updateRow] 更新日をGAS側 JST でセット: ' + updateNowJST);
           continue;
         }
         if (data[colName] !== undefined) {
