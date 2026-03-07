@@ -1453,7 +1453,7 @@
     if (name === 'record')         initRecordForm();
     if (name === 'timesummary')    initTimeSummaryPage();
     if (name === 'payroll-record') renderPayrollRecord();
-    if (name === 'done')           renderDoneList();
+    if (name === 'done')           { fetchRecordsFromSheet().then(function() { renderDoneList(); }); }
     if (name === 'consultation')   initConsultPage();
     if (name === 'inquiry')        initInquiryPage();
     if (name === 'calendar')       initCalendarPage();
@@ -1711,9 +1711,10 @@
 
   // データ再取得して画面更新
   function refreshFromSheet() {
-    return fetchTasksFromSheet().then(function() {
+    return Promise.all([fetchTasksFromSheet(), fetchRecordsFromSheet()]).then(function() {
       renderTasks();
       updateAllStats();
+      renderDoneList();
     });
   }
 
@@ -1859,23 +1860,38 @@
 
   function cycleStatus(id) {
     var tasks = loadTasks();
-    var changed = null;
-    tasks.forEach(function(t) {
-      if (t.id === id) {
-        var idx = STATUS_ORDER.indexOf(t.status);
-        t.status = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
-        changed = t;
-      }
-    });
-    saveTasks(tasks);
-    renderTasks();
-    updateAllStats();
-    if (changed) {
-      var label = STATUS_META[changed.status] ? STATUS_META[changed.status].label : changed.status;
-      addActivity('todo_status_changed', actText(changed.client, changed.text, ' を' + label + 'に変更'));
+    var target = null;
+    tasks.forEach(function(t) { if (t.id === id) target = t; });
+    if (!target) return;
+
+    var idx = STATUS_ORDER.indexOf(target.status);
+    var newStatus = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+
+    // 完了になる場合：GAS保存成功を待ってからUI更新
+    if (newStatus === 'done') {
+      var taskCopy = Object.assign({}, target, { status: 'done' });
+      console.log('[cycleStatus] 完了処理開始:', taskCopy.id, taskCopy.category, taskCopy.text);
+      syncTaskToSheet(taskCopy).then(function(success) {
+        if (success) {
+          console.log('[cycleStatus] GAS保存成功 → UI更新');
+          target.status = 'done';
+          saveTasks(tasks);
+          renderTasks();
+          updateAllStats();
+          addActivity('todo_status_changed', actText(target.client, target.text, ' を完了に変更'));
+          refreshCalendarIfVisible();
+          fetchRecordsFromSheet().then(function() { renderDoneList(); });
+        }
+      });
+    } else {
+      target.status = newStatus;
+      saveTasks(tasks);
+      renderTasks();
+      updateAllStats();
+      var label = STATUS_META[newStatus] ? STATUS_META[newStatus].label : newStatus;
+      addActivity('todo_status_changed', actText(target.client, target.text, ' を' + label + 'に変更'));
       refreshCalendarIfVisible();
-      // TODOシートの状態列を更新（GAS onEditで記録連動）
-      syncTaskToSheet(changed);
+      syncTaskToSheet(target);
     }
   }
 
@@ -2002,28 +2018,47 @@
     if (!textEl || !statusEl) return;
     var newText = textEl.value.trim();
     if (!newText) return;
+
     var tasks = loadTasks();
-    var updated = null;
-    tasks.forEach(function(t) {
-      if (t.id === id) {
-        t.client   = clientEl   ? clientEl.value.trim() : (t.client   || '');
-        t.text     = newText;
-        t.assignee = assigneeEl ? assigneeEl.value       : (t.assignee || '');
-        t.status   = statusEl.value;
-        t.due      = dueEl      ? dueEl.value            : '';
-        updated = t;
-        // category, recordDate, detail, memo はそのまま保持
-      }
-    });
-    saveTasks(tasks);
-    renderTasks();
-    updateAllStats();
-    if (updated) {
-      var label = STATUS_META[updated.status] ? '（' + STATUS_META[updated.status].label + '）' : '';
-      addActivity('todo_updated', actText(updated.client, updated.text, ' を更新' + label));
+    var target = null;
+    tasks.forEach(function(t) { if (t.id === id) target = t; });
+    if (!target) return;
+
+    var oldStatus = target.status;
+    var newStatus = statusEl.value;
+    var editData = {
+      client:   clientEl   ? clientEl.value.trim() : (target.client   || ''),
+      text:     newText,
+      assignee: assigneeEl ? assigneeEl.value       : (target.assignee || ''),
+      status:   newStatus,
+      due:      dueEl      ? dueEl.value            : ''
+    };
+
+    // 完了になる場合：GAS保存成功を待ってからUI更新
+    if (newStatus === 'done' && oldStatus !== 'done') {
+      var taskCopy = Object.assign({}, target, editData);
+      console.log('[commitEdit] 完了処理開始:', taskCopy.id, taskCopy.category, taskCopy.text);
+      syncTaskToSheet(taskCopy).then(function(success) {
+        if (success) {
+          console.log('[commitEdit] GAS保存成功 → UI更新');
+          Object.assign(target, editData);
+          saveTasks(tasks);
+          renderTasks();
+          updateAllStats();
+          addActivity('todo_updated', actText(target.client, target.text, ' を更新（完了）'));
+          refreshCalendarIfVisible();
+          fetchRecordsFromSheet().then(function() { renderDoneList(); });
+        }
+      });
+    } else {
+      Object.assign(target, editData);
+      saveTasks(tasks);
+      renderTasks();
+      updateAllStats();
+      var label = STATUS_META[newStatus] ? '（' + STATUS_META[newStatus].label + '）' : '';
+      addActivity('todo_updated', actText(target.client, target.text, ' を更新' + label));
       refreshCalendarIfVisible();
-      // TODOシートの状態列を更新（GAS onEditで記録連動）
-      syncTaskToSheet(updated);
+      syncTaskToSheet(target);
     }
   }
 
@@ -2172,6 +2207,7 @@
   // ===== TODOシートをGAS経由で更新 =====
 
   // ブラウザで編集 → TODOシートの該当行を更新 → 状態が完了ならGAS側で記録シートへ自動保存
+  // 戻り値: Promise<boolean> — 成功なら true
   function syncTaskToSheet(task) {
     var statusJp = STATUS_CODE_TO_JP[task.status] || task.status;
     var assigneeName = ASSIGNEE_LABEL[task.assignee] || task.assignee || '';
@@ -2191,6 +2227,8 @@
       '作業時間':     task.workMinutes || ''
     };
 
+    console.log('[syncTaskToSheet] POST送信:', JSON.stringify(postData));
+
     return fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -2198,13 +2236,71 @@
     })
     .then(function(res) { return res.json(); })
     .then(function(result) {
+      console.log('[syncTaskToSheet] GASレスポンス:', JSON.stringify(result));
       if (result && result.error) throw new Error(result.error);
-      // シート更新後、画面を再取得して自動更新
-      return refreshFromSheet();
+      // シート更新後、TODOを再取得
+      return refreshFromSheet().then(function() { return true; });
     })
     .catch(function(e) {
-      console.error('TODOシートの更新に失敗:', e);
+      console.error('[syncTaskToSheet] 失敗:', e);
+      alert('シートの更新に失敗しました: ' + e.message + '\nタスクは元の状態に戻します。');
+      return false;
     });
+  }
+
+  // ===== 記録シートからデータ取得 =====
+
+  var recordsCache = [];
+
+  function loadRecords() {
+    return recordsCache.slice();
+  }
+
+  // GAS doGet に ?sheet=記録 を付けて記録シートを取得
+  function fetchRecordsFromSheet() {
+    var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('記録');
+    console.log('[fetchRecordsFromSheet] 取得開始:', url);
+    return fetch(url)
+      .then(function(res) {
+        if (!res.ok) throw new Error('記録データ取得失敗（HTTP ' + res.status + '）');
+        return res.json();
+      })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) {
+          if (rows && Array.isArray(rows.data)) rows = rows.data;
+          else throw new Error('記録データの形式が不正です');
+        }
+        console.log('[fetchRecordsFromSheet] 取得件数:', rows.length);
+        recordsCache = rows.map(function(row) {
+          var completedAt = row['完了日時'] || '';
+          // recordDate: renderArchiveTable が参照するフィールド
+          var recordDate = completedAt ? normalizeDate(completedAt) : '';
+          return {
+            id:         row['ID'] || '',
+            client:     row['クライアント'] || '',
+            category:   row['業務種別'] || '',
+            text:       row['タスク内容'] || '',
+            due:        normalizeDate(row['期限']),
+            assignee:   row['担当者'] || '',
+            status:     'done',
+            priority:   row['優先度'] || '',
+            createdAt:  normalizeDate(row['作成日']),
+            updatedAt:  normalizeDate(row['更新日']),
+            completedAt: completedAt,
+            recordDate:  recordDate,
+            workStart:  row['開始時刻'] || '',
+            workEnd:    row['終了時刻'] || '',
+            workMinutes: row['作業時間'] || '',
+            sourceSheet: row['元シート'] || '',
+            sourceRow:   row['元行番号'] || ''
+          };
+        });
+        return recordsCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchRecordsFromSheet] 失敗:', e);
+        return [];
+      });
   }
 
   // ===== 給与計算記録 / 完了一覧 レンダー =====
@@ -2306,11 +2402,13 @@
   }
 
   function renderDoneList() {
-    var tasks = loadTasks().filter(function(t) {
-      return isArchivedTask(t) && !isPayrollTask(t);
+    // 記録シートのデータを使用（給与計算系は除外）
+    var records = loadRecords().filter(function(t) {
+      return !isPayrollTask(t);
     });
+    console.log('[renderDoneList] 記録シートから表示:', records.length, '件');
     var q = (document.getElementById('done-search') || {}).value || '';
-    renderArchiveTable('done-tbody', 'done-empty', tasks, q);
+    renderArchiveTable('done-tbody', 'done-empty', records, q);
   }
 
   // ===== 手続き件数 集計 =====
@@ -3451,36 +3549,51 @@
   function saveTodoDetailModal() {
     var idVal = parseInt(document.getElementById('todo-modal-id').value, 10);
     if (!idVal) return;
-    var oldTask = loadTasks().filter(function(t) { return t.id === idVal; })[0];
-    var oldStatus = oldTask ? oldTask.status : '';
     var tasks = loadTasks();
-    var updatedTask = null;
-    tasks = tasks.map(function(t) {
-      if (t.id !== idVal) return t;
-      updatedTask = Object.assign({}, t, {
-        client:      document.getElementById('todo-modal-client').value.trim(),
-        text:        document.getElementById('todo-modal-text').value.trim() || t.text,
-        assignee:    document.getElementById('todo-modal-assignee').value,
-        status:      document.getElementById('todo-modal-status').value,
-        due:         document.getElementById('todo-modal-due').value,
-        memo:        document.getElementById('todo-modal-memo').value.trim(),
-        workStart:   document.getElementById('todo-modal-work-start').value,
-        workEnd:     document.getElementById('todo-modal-work-end').value,
-        workMinutes: parseInt(document.getElementById('todo-modal-work-minutes').value || '0', 10) || 0
-      });
-      return updatedTask;
-    });
-    saveTasks(tasks);
+    var target = null;
+    tasks.forEach(function(t) { if (t.id === idVal) target = t; });
+    if (!target) return;
+
+    var oldStatus = target.status;
+    var editData = {
+      client:      document.getElementById('todo-modal-client').value.trim(),
+      text:        document.getElementById('todo-modal-text').value.trim() || target.text,
+      assignee:    document.getElementById('todo-modal-assignee').value,
+      status:      document.getElementById('todo-modal-status').value,
+      due:         document.getElementById('todo-modal-due').value,
+      memo:        document.getElementById('todo-modal-memo').value.trim(),
+      workStart:   document.getElementById('todo-modal-work-start').value,
+      workEnd:     document.getElementById('todo-modal-work-end').value,
+      workMinutes: parseInt(document.getElementById('todo-modal-work-minutes').value || '0', 10) || 0
+    };
+    var newStatus = editData.status;
+
     closeTodoDetailModal();
-    renderTasks();
-    updateAllStats();
-    renderCalendar();
-    var _todoClient = document.getElementById('todo-modal-client').value.trim();
-    var _todoText = document.getElementById('todo-modal-text').value.trim() || '';
-    addActivity('todo_updated', actText(_todoClient, _todoText, ' を更新'));
-    // TODOシートの状態列を更新（GAS onEditで記録連動）
-    if (updatedTask) {
-      syncTaskToSheet(updatedTask);
+
+    // 完了になる場合：GAS保存成功を待ってからUI更新
+    if (newStatus === 'done' && oldStatus !== 'done') {
+      var taskCopy = Object.assign({}, target, editData);
+      console.log('[saveTodoDetailModal] 完了処理開始:', taskCopy.id, taskCopy.category, taskCopy.text);
+      syncTaskToSheet(taskCopy).then(function(success) {
+        if (success) {
+          console.log('[saveTodoDetailModal] GAS保存成功 → UI更新');
+          Object.assign(target, editData);
+          saveTasks(tasks);
+          renderTasks();
+          updateAllStats();
+          renderCalendar();
+          addActivity('todo_updated', actText(target.client, target.text, ' を更新（完了）'));
+          fetchRecordsFromSheet().then(function() { renderDoneList(); });
+        }
+      });
+    } else {
+      Object.assign(target, editData);
+      saveTasks(tasks);
+      renderTasks();
+      updateAllStats();
+      renderCalendar();
+      addActivity('todo_updated', actText(target.client, target.text, ' を更新'));
+      syncTaskToSheet(target);
     }
   }
 
@@ -3841,10 +3954,11 @@
     var d = document.getElementById('rec-date');
     if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
   })();
-  // スプレッドシートからタスクを取得して初期表示
-  fetchTasksFromSheet().then(function() {
+  // スプレッドシートからタスク・記録を取得して初期表示
+  Promise.all([fetchTasksFromSheet(), fetchRecordsFromSheet()]).then(function() {
     renderTasks();
     updateAllStats();
+    console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件');
   });
 </script>
 </body>

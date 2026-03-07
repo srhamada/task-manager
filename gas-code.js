@@ -11,9 +11,19 @@ var SHEET_PAYROLL = '給与計算記録';
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算'];
 
-// --------------- doGet: TODO一覧を返す ---------------
+// --------------- doGet: シートデータを返す ---------------
+// パラメータ ?sheet=記録 で取得先を切り替え可能（デフォルト: TODO）
 function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TODO);
+  var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+
+  if (!sheet) {
+    return jsonResponse_({ error: 'シート「' + sheetName + '」が見つかりません' });
+  }
+
+  Logger.log('[doGet] シート: ' + sheetName);
+
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var result = [];
@@ -25,6 +35,8 @@ function doGet(e) {
     }
     result.push(obj);
   }
+
+  Logger.log('[doGet] 件数: ' + result.length);
 
   return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
@@ -74,10 +86,12 @@ function handleUpdateRow_(ss, data) {
   if (idCol === -1) return jsonResponse_({ error: 'ID列が見つかりません' });
 
   var targetId = String(data.id);
+  Logger.log('[handleUpdateRow_] 対象ID: ' + targetId + ', 状態: ' + data['状態']);
 
   for (var i = 1; i < allData.length; i++) {
     if (String(allData[i][idCol]) === targetId) {
       var rowNum = i + 1;
+      Logger.log('[handleUpdateRow_] ID=' + targetId + ' を行' + rowNum + 'で発見');
 
       // 送信されたフィールドをヘッダーに基づいて更新
       for (var j = 0; j < headers.length; j++) {
@@ -91,13 +105,15 @@ function handleUpdateRow_(ss, data) {
 
       // 状態が「完了」なら記録シートへ保存
       if (data['状態'] === '完了') {
+        Logger.log('[handleUpdateRow_] 完了検知 → saveCompletedTask_ 呼び出し');
         saveCompletedTask_(ss, sheet, allData, headers, i, rowNum);
       }
 
-      return jsonResponse_({ success: true });
+      return jsonResponse_({ success: true, saved: data['状態'] === '完了' });
     }
   }
 
+  Logger.log('[handleUpdateRow_] ID=' + targetId + ' が見つかりません');
   return jsonResponse_({ error: '該当ID(' + targetId + ')が見つかりません' });
 }
 
@@ -106,9 +122,11 @@ function saveCompletedTask_(ss, todoSheet, allData, headers, dataIndex, rowNum) 
   // K列（記録済）チェック — 二重保存防止
   var recordedCol = headers.indexOf('記録済');
   if (recordedCol !== -1) {
-    // 更新後の値を再取得（setValueした直後なので）
     var recordedVal = todoSheet.getRange(rowNum, recordedCol + 1).getValue();
-    if (recordedVal !== '' && recordedVal !== null) return;
+    if (recordedVal !== '' && recordedVal !== null) {
+      Logger.log('[saveCompletedTask_] 記録済のためスキップ（行' + rowNum + '）');
+      return;
+    }
   }
 
   // 最新の行データを取得（直前のsetValueを反映）
@@ -117,23 +135,31 @@ function saveCompletedTask_(ss, todoSheet, allData, headers, dataIndex, rowNum) 
   // 業務種別で分岐
   var categoryCol = headers.indexOf('業務種別');
   var category = categoryCol !== -1 ? String(todoValues[categoryCol]) : '';
+  Logger.log('[saveCompletedTask_] 業務種別: "' + category + '", 行: ' + rowNum);
 
   if (PAYROLL_CATEGORIES.indexOf(category) !== -1) {
+    Logger.log('[saveCompletedTask_] → 給与計算記録シートへ保存');
     saveToPayrollRecordSheet_(ss, headers, todoValues, rowNum);
   } else {
+    Logger.log('[saveCompletedTask_] → 記録シートへ保存');
     saveToRecordSheet_(ss, headers, todoValues, rowNum);
   }
 
   // 記録済に日時を入れる
   if (recordedCol !== -1) {
-    todoSheet.getRange(rowNum, recordedCol + 1).setValue(new Date());
+    var now = new Date();
+    todoSheet.getRange(rowNum, recordedCol + 1).setValue(now);
+    Logger.log('[saveCompletedTask_] 記録済に日時セット: ' + now);
   }
 }
 
 // --------------- 記録シートへ保存 ---------------
 function saveToRecordSheet_(ss, todoHeaders, todoValues, todoRowNum) {
   var sheet = ss.getSheetByName(SHEET_RECORD);
-  if (!sheet) return;
+  if (!sheet) {
+    Logger.log('[saveToRecordSheet_] 記録シートが見つかりません！');
+    return;
+  }
 
   // ヘルパー：TODO列の値を取得
   function tv(colName) {
@@ -165,6 +191,7 @@ function saveToRecordSheet_(ss, todoHeaders, todoValues, todoRowNum) {
   ];
 
   sheet.appendRow(row);
+  Logger.log('[saveToRecordSheet_] 記録シートに追加完了: ID=' + tv('ID') + ', 業務種別=' + tv('業務種別') + ', タスク=' + tv('タスク内容'));
 }
 
 // --------------- 給与計算記録シートへ保存 ---------------
