@@ -238,7 +238,8 @@ function handleCompleteTodo_(ss, data) {
   });
 }
 
-// --------------- 行更新処理（完了以外のステータス変更用） ---------------
+// --------------- 行更新処理（既存行のステータス等を更新） ---------------
+// appendRow は使わず、必ず該当IDの行を探して上書きする
 function handleUpdateRow_(ss, data) {
   var sheet = ss.getSheetByName(SHEET_TODO);
   if (!sheet) return jsonResponse_({ error: 'TODOシートが見つかりません' });
@@ -259,13 +260,21 @@ function handleUpdateRow_(ss, data) {
       // 送信されたフィールドをヘッダーに基づいて更新
       for (var j = 0; j < headers.length; j++) {
         var colName = headers[j];
+        // ID・作成日・記録済は変更しない
         if (colName === 'ID' || colName === '作成日' || colName === '記録済') continue;
+        // 更新日はGAS側の現在日時を強制使用（ブラウザの値は無視）
+        if (colName === '更新日') {
+          sheet.getRange(rowNum, j + 1).setValue(new Date());
+          Logger.log('[updateRow] 更新日をGAS側 new Date() でセット');
+          continue;
+        }
         if (data[colName] !== undefined) {
           sheet.getRange(rowNum, j + 1).setValue(data[colName]);
         }
       }
 
-      return jsonResponse_({ success: true });
+      Logger.log('[updateRow] 行' + rowNum + ' の更新完了');
+      return jsonResponse_({ success: true, updatedRow: rowNum });
     }
   }
 

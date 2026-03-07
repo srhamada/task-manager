@@ -2236,7 +2236,8 @@
 
   // ===== TODOシートをGAS経由で更新 =====
 
-  // 完了以外のステータス変更・編集をGASに送信
+  // 完了以外のステータス変更・編集をGASに送信（既存行を更新、appendRowしない）
+  // 更新日はGAS側で new Date() をセットするのでブラウザからは送らない
   function syncTaskToSheet(task) {
     var statusJp = STATUS_CODE_TO_JP[task.status] || task.status;
     var assigneeName = ASSIGNEE_LABEL[task.assignee] || task.assignee || '';
@@ -2250,7 +2251,6 @@
       '担当者':       assigneeName,
       '状態':         statusJp,
       '優先度':       task.priority || '',
-      '更新日':       new Date().toISOString().slice(0, 10),
       '開始時刻':     task.workStart   || '',
       '終了時刻':     task.workEnd     || '',
       '作業時間':     task.workMinutes || ''
@@ -2276,7 +2276,9 @@
   }
 
   // ===== TODO完了処理 =====
-  // 記録シートへ直接 appendRow（addTask と同じ仕組み＝実績あり）
+  // GAS側の completeTodo アクションを呼び出す（一括処理）
+  // GAS側で: TODO既存行のG列を「完了」に更新 + 記録/給与計算記録へコピー + 記録済セット
+  // appendRow でTODOに新規行を作らない。既存行の更新のみ。
   // 成功時のみ true を返す。失敗時は false でTODOを消さない。
   function completeTodo(id) {
     var task = null;
@@ -2288,56 +2290,20 @@
 
     var isPayroll = isPayrollTask(task);
     var targetSheet = isPayroll ? '給与計算記録' : '記録';
-    var assigneeName = ASSIGNEE_LABEL[task.assignee] || task.assignee || '';
-    var now = new Date().toISOString().slice(0, 10);
 
     console.log('[completeTodo] ===== 完了処理開始 =====');
     console.log('[completeTodo] ID=' + id);
     console.log('[completeTodo] 業務種別=' + (task.category || '(なし)'));
     console.log('[completeTodo] 保存先シート=' + targetSheet);
 
-    var postData;
-    if (isPayroll) {
-      var payrollMonth = task.due ? task.due.slice(0, 7) : '';
-      postData = {
-        sheet: '給与計算記録',
-        'ID':             now.replace(/-/g, '') + String(id),
-        '元タスクID':     String(task.id),
-        'クライアント':   task.client || '',
-        '給与対象月':     payrollMonth,
-        'タスク内容':     task.text || '',
-        '担当者':         assigneeName,
-        '完了日':         now,
-        '作業時間（分）': task.workMinutes || '',
-        '人数':           '',
-        'メモ':           '',
-        '開始時刻':       task.workStart || '',
-        '終了時刻':       task.workEnd || '',
-        '作業時間':       task.workMinutes || ''
-      };
-    } else {
-      postData = {
-        sheet: '記録',
-        'ID':           String(task.id),
-        'クライアント': task.client || '',
-        '業務種別':     task.category || '',
-        'タスク内容':   task.text || '',
-        '期限':         task.due || '',
-        '担当者':       assigneeName,
-        '状態':         '完了',
-        '優先度':       task.priority || '',
-        '作成日':       task.createdAt || '',
-        '更新日':       now,
-        '完了日時':     now,
-        '開始時刻':     task.workStart || '',
-        '終了時刻':     task.workEnd || '',
-        '作業時間':     task.workMinutes || '',
-        '元シート':     'TODO',
-        '元行番号':     ''
-      };
-    }
+    // GAS側の handleCompleteTodo_ を呼び出す
+    // GAS側で: 既存行のステータス更新 + 記録シートへコピー + 記録済セット
+    var postData = {
+      action: 'completeTodo',
+      id: id
+    };
 
-    console.log('[completeTodo] appendRow用データ:', JSON.stringify(postData));
+    console.log('[completeTodo] POSTデータ:', JSON.stringify(postData));
 
     return fetch(GAS_URL, {
       method: 'POST',
@@ -2347,35 +2313,17 @@
     .then(function(res) { return res.json(); })
     .then(function(result) {
       console.log('[completeTodo] GASレスポンス:', JSON.stringify(result));
-      // レスポンスが配列の場合 = POSTがGETにリダイレクトされた
       if (Array.isArray(result)) {
         throw new Error('POSTがGETに変換されました。GASウェブアプリの再デプロイが必要です。');
       }
       if (result && result.error) {
         throw new Error(result.error);
       }
-      console.log('[completeTodo] ===== 記録シートへの保存成功 =====');
-
-      // TODOシートのG列（状態）を「完了」に更新
-      console.log('[completeTodo] TODOシートのステータスを完了に更新');
-      var updateData = {
-        action: 'updateRow',
-        id: id,
-        '状態': '完了',
-        '更新日': now
-      };
-      return fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(updateData)
-      })
-      .then(function(res2) { return res2.json(); })
-      .then(function(result2) {
-        console.log('[completeTodo] TODOステータス更新レスポンス:', JSON.stringify(result2));
-        // updateRowが未対応でもappendRow成功済みなのでtrueを返す
-        console.log('[completeTodo] ===== 完了処理すべて成功 =====');
-        return true;
-      });
+      if (result && result.skipped) {
+        console.log('[completeTodo] 既に記録済（スキップ）');
+      }
+      console.log('[completeTodo] ===== 完了処理成功 ===== 保存先: ' + (result.savedTo || targetSheet));
+      return true;
     })
     .catch(function(e) {
       console.error('[completeTodo] ===== 保存失敗 =====', e);
