@@ -1872,20 +1872,20 @@
     var idx = STATUS_ORDER.indexOf(target.status);
     var newStatus = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
 
-    // 完了になる場合：GAS completeTodo で一括処理
+    // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done') {
-      console.log('[cycleStatus] 完了処理開始:', target.id, target.category, target.text);
+      console.log('[cycleStatus] 完了処理開始 ID=' + target.id);
       completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[cycleStatus] 完了処理成功 → 再取得');
+          console.log('[cycleStatus] 保存成功 → TODO一覧から除外開始');
           addActivity('todo_status_changed', actText(target.client, target.text, ' を完了に変更'));
-          // GAS側で全て処理済なので、シートから再取得してUI更新
-          refreshFromSheet().then(function() {
+          console.log('[cycleStatus] 記録・給与計算記録を再取得');
+          return refreshFromSheet().then(function() {
+            console.log('[cycleStatus] 再取得完了 → UI更新');
             refreshCalendarIfVisible();
           });
         } else {
-          console.log('[cycleStatus] 完了処理失敗 → TODO維持');
-          renderTasks(); // 元の状態を再描画
+          console.log('[cycleStatus] 保存失敗 → TODOを消さない');
         }
       });
     } else {
@@ -2039,21 +2039,20 @@
       due:      dueEl      ? dueEl.value            : ''
     };
 
-    // 完了になる場合：GAS completeTodo で一括処理
+    // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done' && oldStatus !== 'done') {
-      console.log('[commitEdit] 完了処理開始:', target.id, target.category, target.text);
-      // まず完了以外のフィールド変更を先にGASに送信
-      var taskCopy = Object.assign({}, target, editData, { status: oldStatus });
-      syncTaskToSheet(taskCopy).then(function() {
-        // その後、完了処理を実行
-        return completeTodo(target.id);
-      }).then(function(success) {
+      console.log('[commitEdit] 完了処理開始 ID=' + target.id);
+      // まずフィールド変更をローカルに反映（完了以外）
+      Object.assign(target, editData, { status: oldStatus });
+      saveTasks(tasks);
+      // 記録シートへ保存
+      completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[commitEdit] 完了処理成功 → 再取得');
+          console.log('[commitEdit] 保存成功 → TODO一覧から除外');
           addActivity('todo_updated', actText(editData.client || target.client, editData.text, ' を更新（完了）'));
-          refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
+          return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
         } else {
-          console.log('[commitEdit] 完了処理失敗 → TODO維持');
+          console.log('[commitEdit] 保存失敗 → TODOを消さない');
           renderTasks();
         }
       });
@@ -2200,9 +2199,9 @@
 
   // ===== アーカイブ判定ヘルパー =====
 
-  // ステータスが「完了」のタスクはアーカイブ対象（即時移動）
+  // ステータスが「完了」または記録シートに保存済みならアーカイブ対象
   function isArchivedTask(t) {
-    return t.status === 'done';
+    return t.status === 'done' || isCompletedInRecords(t.id);
   }
 
   // 給与計算系かどうか
@@ -2252,16 +2251,69 @@
     });
   }
 
-  // ===== TODO完了処理（専用アクション） =====
-  // GAS側で TODO更新→記録シート保存→記録済セット を一括実行
-  // 成功時のみ true を返す
+  // ===== TODO完了処理 =====
+  // 記録シートへ直接 appendRow（addTask と同じ仕組み＝実績あり）
+  // 成功時のみ true を返す。失敗時は false でTODOを消さない。
   function completeTodo(id) {
-    console.log('[completeTodo] 完了処理開始 ID=' + id);
+    var task = null;
+    loadTasks().forEach(function(t) { if (t.id === id) task = t; });
+    if (!task) {
+      console.error('[completeTodo] タスクID=' + id + ' が見つかりません');
+      return Promise.resolve(false);
+    }
 
-    var postData = {
-      action: 'completeTodo',
-      id: id
-    };
+    var isPayroll = isPayrollTask(task);
+    var targetSheet = isPayroll ? '給与計算記録' : '記録';
+    var assigneeName = ASSIGNEE_LABEL[task.assignee] || task.assignee || '';
+    var now = new Date().toISOString().slice(0, 10);
+
+    console.log('[completeTodo] ===== 完了処理開始 =====');
+    console.log('[completeTodo] ID=' + id);
+    console.log('[completeTodo] 業務種別=' + (task.category || '(なし)'));
+    console.log('[completeTodo] 保存先シート=' + targetSheet);
+
+    var postData;
+    if (isPayroll) {
+      var payrollMonth = task.due ? task.due.slice(0, 7) : '';
+      postData = {
+        sheet: '給与計算記録',
+        'ID':             now.replace(/-/g, '') + String(id),
+        '元タスクID':     String(task.id),
+        'クライアント':   task.client || '',
+        '給与対象月':     payrollMonth,
+        'タスク内容':     task.text || '',
+        '担当者':         assigneeName,
+        '完了日':         now,
+        '作業時間（分）': task.workMinutes || '',
+        '人数':           '',
+        'メモ':           '',
+        '開始時刻':       task.workStart || '',
+        '終了時刻':       task.workEnd || '',
+        '作業時間':       task.workMinutes || ''
+      };
+    } else {
+      postData = {
+        sheet: '記録',
+        'ID':           String(task.id),
+        'クライアント': task.client || '',
+        '業務種別':     task.category || '',
+        'タスク内容':   task.text || '',
+        '期限':         task.due || '',
+        '担当者':       assigneeName,
+        '状態':         '完了',
+        '優先度':       task.priority || '',
+        '作成日':       task.createdAt || '',
+        '更新日':       now,
+        '完了日時':     now,
+        '開始時刻':     task.workStart || '',
+        '終了時刻':     task.workEnd || '',
+        '作業時間':     task.workMinutes || '',
+        '元シート':     'TODO',
+        '元行番号':     ''
+      };
+    }
+
+    console.log('[completeTodo] appendRow用データ:', JSON.stringify(postData));
 
     return fetch(GAS_URL, {
       method: 'POST',
@@ -2271,17 +2323,29 @@
     .then(function(res) { return res.json(); })
     .then(function(result) {
       console.log('[completeTodo] GASレスポンス:', JSON.stringify(result));
+      // レスポンスが配列の場合 = POSTがGETにリダイレクトされた
+      if (Array.isArray(result)) {
+        throw new Error('POSTがGETに変換されました。GASウェブアプリの再デプロイが必要です。');
+      }
       if (result && result.error) {
         throw new Error(result.error);
       }
-      console.log('[completeTodo] 保存先:', result.savedTo, ', カテゴリ:', result.category);
+      console.log('[completeTodo] ===== 記録シートへの保存成功 =====');
       return true;
     })
     .catch(function(e) {
-      console.error('[completeTodo] 失敗:', e);
-      alert('完了処理に失敗しました: ' + e.message + '\nタスクは元の状態に戻します。');
+      console.error('[completeTodo] ===== 保存失敗 =====', e);
+      alert('完了処理に失敗しました: ' + e.message + '\nタスクはTODOに残します。');
       return false;
     });
+  }
+
+  // 記録シートに保存済みかどうかをチェック（TODOフィルタ用）
+  function isCompletedInRecords(taskId) {
+    var sid = String(taskId);
+    var inRecords = loadRecords().some(function(r) { return String(r.id) === sid; });
+    var inPayroll = loadPayrollRecords().some(function(r) { return String(r.todoId) === sid; });
+    return inRecords || inPayroll;
   }
 
   // ===== 記録シートからデータ取得 =====
@@ -3657,20 +3721,20 @@
 
     closeTodoDetailModal();
 
-    // 完了になる場合：GAS completeTodo で一括処理
+    // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done' && oldStatus !== 'done') {
-      console.log('[saveTodoDetailModal] 完了処理開始:', target.id, target.category, target.text);
-      // まず完了以外のフィールド変更を先にGASに送信
-      var taskCopy = Object.assign({}, target, editData, { status: oldStatus });
-      syncTaskToSheet(taskCopy).then(function() {
-        return completeTodo(target.id);
-      }).then(function(success) {
+      console.log('[saveTodoDetailModal] 完了処理開始 ID=' + target.id);
+      // フィールド変更をローカルに反映（完了以外）
+      Object.assign(target, editData, { status: oldStatus });
+      saveTasks(tasks);
+      // 記録シートへ保存
+      completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[saveTodoDetailModal] 完了処理成功 → 再取得');
+          console.log('[saveTodoDetailModal] 保存成功 → TODO一覧から除外');
           addActivity('todo_updated', actText(editData.client || target.client, editData.text || target.text, ' を更新（完了）'));
-          refreshFromSheet().then(function() { renderCalendar(); });
+          return refreshFromSheet().then(function() { renderCalendar(); });
         } else {
-          console.log('[saveTodoDetailModal] 完了処理失敗 → TODO維持');
+          console.log('[saveTodoDetailModal] 保存失敗 → TODOを消さない');
           renderTasks();
         }
       });
