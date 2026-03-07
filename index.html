@@ -4160,5 +4160,47 @@
     console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, 給与計算記録:', loadPayrollRecords().length, '件');
   });
 </script>
-</body>
+<script>
+  (function () {
+    const PASSWORD = "PvDt@9xjYh@mWx"; // ←ここは好きなパスワードに変更
+
+    const ok = sessionStorage.getItem("app_auth") === "ok";
+    if (ok) return;
+
+    const input = window.prompt("このツールは限定公開です。パスワードを入力してください。");
+    if (input === PASSWORD) {
+      sessionStorage.setItem("app_auth", "ok");
+      return;
+    }
+
+    
+    document.body.innerHTML = `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        min-height:100vh;
+        width:100%;
+        background:#f5f7f5;
+        font-family:'Segoe UI','Hiragino Sans','Meiryo',sans-serif;
+        color:#263326;
+        padding:24px;
+      ">
+        <div style="
+          background:#fff;
+          border-radius:16px;
+          box-shadow:0 8px 24px rgba(0,0,0,0.08);
+          padding:32px;
+          max-width:420px;
+          width:100%;
+          text-align:center;
+        ">
+          <h1 style="font-size:22px; margin-bottom:12px;">社労士業務管理ツール</h1>
+          <p style="line-height:1.8;">パスワードが違うため、このページは表示できません。</p>
+        </div>
+      </div>
+    `;
+    throw new Error("Unauthorized");
+  })();
+</script></body>
 </html>
