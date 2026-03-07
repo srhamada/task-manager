@@ -9,7 +9,7 @@ var SHEET_RECORD  = '記録';
 var SHEET_PAYROLL = '給与計算記録';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
-var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算'];
+var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
 
 // --------------- doGet: シートデータを返す ---------------
 // パラメータ ?sheet=記録 で取得先を切り替え可能（デフォルト: TODO）
@@ -152,11 +152,14 @@ function handleCompleteTodo_(ss, data) {
     return idx !== -1 ? todoValues[idx] : '';
   }
 
-  // --- 業務種別を判定 ---
-  var category = String(tv('業務種別'));
+  // --- 業務種別を判定（C列を参照、trimして比較） ---
+  var categoryRaw = tv('業務種別');
+  var category = String(categoryRaw || '').trim();
   var isPayroll = PAYROLL_CATEGORIES.indexOf(category) !== -1;
   var targetSheetName = isPayroll ? SHEET_PAYROLL : SHEET_RECORD;
-  Logger.log('[completeTodo] 業務種別: "' + category + '" → 保存先: ' + targetSheetName);
+  Logger.log('[completeTodo] 業務種別(元値): "' + categoryRaw + '"');
+  Logger.log('[completeTodo] 業務種別(trim後): "' + category + '"');
+  Logger.log('[completeTodo] 分岐結果: ' + (isPayroll ? '給与計算記録' : '記録') + ' → 保存先: ' + targetSheetName);
 
   // --- 記録シートへ保存 ---
   var targetSheet = ss.getSheetByName(targetSheetName);

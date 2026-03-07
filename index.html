@@ -1802,17 +1802,19 @@
   }
 
   function renderTasks() {
-    // TODOシートから取得したタスクを表示（「記録済」列に値があるもののみ除外）
+    // TODOシートから取得したタスクを表示（完了 or 記録済を除外）
     var allTasks = loadTasks();
     console.log('[renderTasks] 取得元: TODOシート, 全件数: ' + allTasks.length);
+    var excludedCount = 0;
     var tasks = sortTasks(allTasks.filter(function(t) {
       var archived = isArchivedTask(t);
       if (archived) {
-        console.log('[renderTasks] 除外（記録済）: ID=' + t.id + ', status=' + t.status + ', recorded=' + t.recorded);
+        excludedCount++;
+        console.log('[renderTasks] 除外: ID=' + t.id + ', status=' + t.status + ', recorded=' + t.recorded + ', category=' + t.category);
       }
       return !archived;
     }));
-    console.log('[renderTasks] 表示対象件数: ' + tasks.length);
+    console.log('[renderTasks] 除外件数: ' + excludedCount + ', 表示対象件数: ' + tasks.length);
 
     // 担当者フィルター適用
     if (currentFilter) {
@@ -2223,15 +2225,19 @@
 
   // ===== アーカイブ判定ヘルパー =====
 
-  // TODOシートの「記録済」列に値がある場合のみアーカイブ対象
-  // ステータスが「完了」でも記録済でなければTODOに表示する
+  // TODO一覧から除外する条件：
+  // ・状態が「完了」（done）のタスク
+  // ・記録済列に値があるタスク
+  // 完了タスクは給与計算記録または完了一覧で表示する
   function isArchivedTask(t) {
-    return t.recorded !== '' && t.recorded !== undefined && t.recorded !== null;
+    if (t.status === 'done') return true;
+    if (t.recorded !== '' && t.recorded !== undefined && t.recorded !== null) return true;
+    return false;
   }
 
-  // 給与計算系かどうか
+  // 給与計算系かどうか（業務種別のみで判定、trimして比較）
   function isPayrollTask(t) {
-    var cat = t.category || t.text || '';
+    var cat = String(t.category || '').trim();
     return PAYROLL_CATEGORIES.indexOf(cat) !== -1;
   }
 
@@ -2289,12 +2295,16 @@
       return Promise.resolve(false);
     }
 
+    var categoryRaw = task.category || '';
+    var categoryTrimmed = String(categoryRaw).trim();
     var isPayroll = isPayrollTask(task);
     var targetSheet = isPayroll ? '給与計算記録' : '記録';
 
     console.log('[completeTodo] ===== 完了処理開始 =====');
     console.log('[completeTodo] ID=' + id);
-    console.log('[completeTodo] 業務種別=' + (task.category || '(なし)'));
+    console.log('[completeTodo] 業務種別(元値)="' + categoryRaw + '"');
+    console.log('[completeTodo] 業務種別(trim後)="' + categoryTrimmed + '"');
+    console.log('[completeTodo] 分岐結果: ' + (isPayroll ? '給与計算記録' : '記録'));
     console.log('[completeTodo] 保存先シート=' + targetSheet);
 
     // GAS側の handleCompleteTodo_ を呼び出す
