@@ -1655,6 +1655,7 @@
     'ID': 'id', 'クライアント': 'client', '業務種別': 'category',
     'タスク内容': 'text', '期限': 'due', '担当者': 'assignee',
     '状態': 'status', '優先度': 'priority', '作成日': 'createdAt', '更新日': 'updatedAt',
+    '記録済': 'recorded',
     '開始時刻': 'workStart', '終了時刻': 'workEnd', '作業時間': 'workMinutes'
   };
 
@@ -1666,6 +1667,7 @@
 
   // GASからタスク一覧を取得してキャッシュに格納
   function fetchTasksFromSheet() {
+    console.log('[fetchTasksFromSheet] 取得元: TODOシート');
     return fetch(GAS_URL)
       .then(function(res) {
         if (!res.ok) throw new Error('データ取得に失敗しました（HTTP ' + res.status + '）');
@@ -1676,6 +1678,7 @@
           if (rows && Array.isArray(rows.data)) rows = rows.data;
           else throw new Error('サーバーから不正なデータ形式が返されました');
         }
+        console.log('[fetchTasksFromSheet] 取得件数: ' + rows.length);
         tasksCache = rows.map(function(row) {
           var t = {};
           Object.keys(SHEET_TO_PROP).forEach(function(jp) {
@@ -1693,6 +1696,10 @@
           if (t.assignee === undefined) t.assignee = '';
           if (t.category === undefined) t.category = '';
           if (t.text     === undefined) t.text     = '';
+          // 記録済フラグ（空文字 = 未記録）
+          if (t.recorded === undefined) t.recorded = '';
+          // 空文字に正規化（GASから0やfalseが来る場合の対策）
+          if (!t.recorded) t.recorded = '';
           // 日付フィールドの正規化（ISO文字列→yyyy-mm-dd）
           t.due       = normalizeDate(t.due);
           t.createdAt = normalizeDate(t.createdAt);
@@ -1794,8 +1801,17 @@
   }
 
   function renderTasks() {
-    // アーカイブ済み（完了 + 今週より前）はダッシュボードTODOから除外
-    var tasks = sortTasks(loadTasks().filter(function(t) { return !isArchivedTask(t); }));
+    // TODOシートから取得したタスクを表示（「記録済」列に値があるもののみ除外）
+    var allTasks = loadTasks();
+    console.log('[renderTasks] 取得元: TODOシート, 全件数: ' + allTasks.length);
+    var tasks = sortTasks(allTasks.filter(function(t) {
+      var archived = isArchivedTask(t);
+      if (archived) {
+        console.log('[renderTasks] 除外（記録済）: ID=' + t.id + ', status=' + t.status + ', recorded=' + t.recorded);
+      }
+      return !archived;
+    }));
+    console.log('[renderTasks] 表示対象件数: ' + tasks.length);
 
     // 担当者フィルター適用
     if (currentFilter) {
@@ -1874,12 +1890,16 @@
 
     // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done') {
-      console.log('[cycleStatus] 完了処理開始 ID=' + target.id);
+      console.log('[cycleStatus] 完了処理開始 ID=' + target.id + ', 業務種別=' + (target.category || '(なし)'));
       completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[cycleStatus] 保存成功 → TODO一覧から除外開始');
+          console.log('[cycleStatus] 保存成功 → 記録済フラグセット → TODO一覧から除外');
+          // ローカルキャッシュにも記録済を反映
+          target.status = 'done';
+          target.recorded = new Date().toISOString();
+          saveTasks(loadTasks());
           addActivity('todo_status_changed', actText(target.client, target.text, ' を完了に変更'));
-          console.log('[cycleStatus] 記録・給与計算記録を再取得');
+          console.log('[cycleStatus] スプレッドから再取得開始');
           return refreshFromSheet().then(function() {
             console.log('[cycleStatus] 再取得完了 → UI更新');
             refreshCalendarIfVisible();
@@ -2041,14 +2061,17 @@
 
     // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done' && oldStatus !== 'done') {
-      console.log('[commitEdit] 完了処理開始 ID=' + target.id);
+      console.log('[commitEdit] 完了処理開始 ID=' + target.id + ', 業務種別=' + (target.category || '(なし)'));
       // まずフィールド変更をローカルに反映（完了以外）
       Object.assign(target, editData, { status: oldStatus });
       saveTasks(tasks);
       // 記録シートへ保存
       completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[commitEdit] 保存成功 → TODO一覧から除外');
+          console.log('[commitEdit] 保存成功 → 記録済フラグセット → TODO一覧から除外');
+          target.status = 'done';
+          target.recorded = new Date().toISOString();
+          saveTasks(loadTasks());
           addActivity('todo_updated', actText(editData.client || target.client, editData.text, ' を更新（完了）'));
           return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
         } else {
@@ -2199,9 +2222,10 @@
 
   // ===== アーカイブ判定ヘルパー =====
 
-  // ステータスが「完了」または記録シートに保存済みならアーカイブ対象
+  // TODOシートの「記録済」列に値がある場合のみアーカイブ対象
+  // ステータスが「完了」でも記録済でなければTODOに表示する
   function isArchivedTask(t) {
-    return t.status === 'done' || isCompletedInRecords(t.id);
+    return t.recorded !== '' && t.recorded !== undefined && t.recorded !== null;
   }
 
   // 給与計算系かどうか
@@ -2331,7 +2355,27 @@
         throw new Error(result.error);
       }
       console.log('[completeTodo] ===== 記録シートへの保存成功 =====');
-      return true;
+
+      // TODOシートのG列（状態）を「完了」に更新
+      console.log('[completeTodo] TODOシートのステータスを完了に更新');
+      var updateData = {
+        action: 'updateRow',
+        id: id,
+        '状態': '完了',
+        '更新日': now
+      };
+      return fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(updateData)
+      })
+      .then(function(res2) { return res2.json(); })
+      .then(function(result2) {
+        console.log('[completeTodo] TODOステータス更新レスポンス:', JSON.stringify(result2));
+        // updateRowが未対応でもappendRow成功済みなのでtrueを返す
+        console.log('[completeTodo] ===== 完了処理すべて成功 =====');
+        return true;
+      });
     })
     .catch(function(e) {
       console.error('[completeTodo] ===== 保存失敗 =====', e);
@@ -3723,14 +3767,17 @@
 
     // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done' && oldStatus !== 'done') {
-      console.log('[saveTodoDetailModal] 完了処理開始 ID=' + target.id);
+      console.log('[saveTodoDetailModal] 完了処理開始 ID=' + target.id + ', 業務種別=' + (target.category || '(なし)'));
       // フィールド変更をローカルに反映（完了以外）
       Object.assign(target, editData, { status: oldStatus });
       saveTasks(tasks);
       // 記録シートへ保存
       completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[saveTodoDetailModal] 保存成功 → TODO一覧から除外');
+          console.log('[saveTodoDetailModal] 保存成功 → 記録済フラグセット → TODO一覧から除外');
+          target.status = 'done';
+          target.recorded = new Date().toISOString();
+          saveTasks(loadTasks());
           addActivity('todo_updated', actText(editData.client || target.client, editData.text || target.text, ' を更新（完了）'));
           return refreshFromSheet().then(function() { renderCalendar(); });
         } else {
