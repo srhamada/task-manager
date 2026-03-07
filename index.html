@@ -1452,7 +1452,7 @@
     if (name === 'clients')        renderClients();
     if (name === 'record')         initRecordForm();
     if (name === 'timesummary')    initTimeSummaryPage();
-    if (name === 'payroll-record') renderPayrollRecord();
+    if (name === 'payroll-record') { fetchPayrollRecordsFromSheet().then(function() { renderPayrollRecord(); }); }
     if (name === 'done')           { fetchRecordsFromSheet().then(function() { renderDoneList(); }); }
     if (name === 'consultation')   initConsultPage();
     if (name === 'inquiry')        initInquiryPage();
@@ -1711,10 +1711,15 @@
 
   // データ再取得して画面更新
   function refreshFromSheet() {
-    return Promise.all([fetchTasksFromSheet(), fetchRecordsFromSheet()]).then(function() {
+    return Promise.all([
+      fetchTasksFromSheet(),
+      fetchRecordsFromSheet(),
+      fetchPayrollRecordsFromSheet()
+    ]).then(function() {
       renderTasks();
       updateAllStats();
       renderDoneList();
+      renderPayrollRecord();
     });
   }
 
@@ -1867,20 +1872,20 @@
     var idx = STATUS_ORDER.indexOf(target.status);
     var newStatus = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
 
-    // 完了になる場合：GAS保存成功を待ってからUI更新
+    // 完了になる場合：GAS completeTodo で一括処理
     if (newStatus === 'done') {
-      var taskCopy = Object.assign({}, target, { status: 'done' });
-      console.log('[cycleStatus] 完了処理開始:', taskCopy.id, taskCopy.category, taskCopy.text);
-      syncTaskToSheet(taskCopy).then(function(success) {
+      console.log('[cycleStatus] 完了処理開始:', target.id, target.category, target.text);
+      completeTodo(target.id).then(function(success) {
         if (success) {
-          console.log('[cycleStatus] GAS保存成功 → UI更新');
-          target.status = 'done';
-          saveTasks(tasks);
-          renderTasks();
-          updateAllStats();
+          console.log('[cycleStatus] 完了処理成功 → 再取得');
           addActivity('todo_status_changed', actText(target.client, target.text, ' を完了に変更'));
-          refreshCalendarIfVisible();
-          fetchRecordsFromSheet().then(function() { renderDoneList(); });
+          // GAS側で全て処理済なので、シートから再取得してUI更新
+          refreshFromSheet().then(function() {
+            refreshCalendarIfVisible();
+          });
+        } else {
+          console.log('[cycleStatus] 完了処理失敗 → TODO維持');
+          renderTasks(); // 元の状態を再描画
         }
       });
     } else {
@@ -2034,20 +2039,22 @@
       due:      dueEl      ? dueEl.value            : ''
     };
 
-    // 完了になる場合：GAS保存成功を待ってからUI更新
+    // 完了になる場合：GAS completeTodo で一括処理
     if (newStatus === 'done' && oldStatus !== 'done') {
-      var taskCopy = Object.assign({}, target, editData);
-      console.log('[commitEdit] 完了処理開始:', taskCopy.id, taskCopy.category, taskCopy.text);
-      syncTaskToSheet(taskCopy).then(function(success) {
+      console.log('[commitEdit] 完了処理開始:', target.id, target.category, target.text);
+      // まず完了以外のフィールド変更を先にGASに送信
+      var taskCopy = Object.assign({}, target, editData, { status: oldStatus });
+      syncTaskToSheet(taskCopy).then(function() {
+        // その後、完了処理を実行
+        return completeTodo(target.id);
+      }).then(function(success) {
         if (success) {
-          console.log('[commitEdit] GAS保存成功 → UI更新');
-          Object.assign(target, editData);
-          saveTasks(tasks);
+          console.log('[commitEdit] 完了処理成功 → 再取得');
+          addActivity('todo_updated', actText(editData.client || target.client, editData.text, ' を更新（完了）'));
+          refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
+        } else {
+          console.log('[commitEdit] 完了処理失敗 → TODO維持');
           renderTasks();
-          updateAllStats();
-          addActivity('todo_updated', actText(target.client, target.text, ' を更新（完了）'));
-          refreshCalendarIfVisible();
-          fetchRecordsFromSheet().then(function() { renderDoneList(); });
         }
       });
     } else {
@@ -2206,8 +2213,7 @@
 
   // ===== TODOシートをGAS経由で更新 =====
 
-  // ブラウザで編集 → TODOシートの該当行を更新 → 状態が完了ならGAS側で記録シートへ自動保存
-  // 戻り値: Promise<boolean> — 成功なら true
+  // 完了以外のステータス変更・編集をGASに送信
   function syncTaskToSheet(task) {
     var statusJp = STATUS_CODE_TO_JP[task.status] || task.status;
     var assigneeName = ASSIGNEE_LABEL[task.assignee] || task.assignee || '';
@@ -2238,12 +2244,42 @@
     .then(function(result) {
       console.log('[syncTaskToSheet] GASレスポンス:', JSON.stringify(result));
       if (result && result.error) throw new Error(result.error);
-      // シート更新後、TODOを再取得
-      return refreshFromSheet().then(function() { return true; });
+      return true;
     })
     .catch(function(e) {
       console.error('[syncTaskToSheet] 失敗:', e);
-      alert('シートの更新に失敗しました: ' + e.message + '\nタスクは元の状態に戻します。');
+      return false;
+    });
+  }
+
+  // ===== TODO完了処理（専用アクション） =====
+  // GAS側で TODO更新→記録シート保存→記録済セット を一括実行
+  // 成功時のみ true を返す
+  function completeTodo(id) {
+    console.log('[completeTodo] 完了処理開始 ID=' + id);
+
+    var postData = {
+      action: 'completeTodo',
+      id: id
+    };
+
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      console.log('[completeTodo] GASレスポンス:', JSON.stringify(result));
+      if (result && result.error) {
+        throw new Error(result.error);
+      }
+      console.log('[completeTodo] 保存先:', result.savedTo, ', カテゴリ:', result.category);
+      return true;
+    })
+    .catch(function(e) {
+      console.error('[completeTodo] 失敗:', e);
+      alert('完了処理に失敗しました: ' + e.message + '\nタスクは元の状態に戻します。');
       return false;
     });
   }
@@ -2303,6 +2339,57 @@
       });
   }
 
+  // ===== 給与計算記録シートからデータ取得 =====
+
+  var payrollRecordsCache = [];
+
+  function loadPayrollRecords() {
+    return payrollRecordsCache.slice();
+  }
+
+  function fetchPayrollRecordsFromSheet() {
+    var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('給与計算記録');
+    console.log('[fetchPayrollRecordsFromSheet] 取得開始');
+    return fetch(url)
+      .then(function(res) {
+        if (!res.ok) throw new Error('給与計算記録取得失敗（HTTP ' + res.status + '）');
+        return res.json();
+      })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) {
+          if (rows && Array.isArray(rows.data)) rows = rows.data;
+          else throw new Error('給与計算記録データの形式が不正です');
+        }
+        console.log('[fetchPayrollRecordsFromSheet] 取得件数:', rows.length);
+        payrollRecordsCache = rows.map(function(row) {
+          var completedAt = row['完了日'] || '';
+          var recordDate = completedAt ? normalizeDate(completedAt) : '';
+          return {
+            id:           row['ID'] || '',
+            todoId:       row['元タスクID'] || '',
+            client:       row['クライアント'] || '',
+            category:     '給与計算',
+            text:         row['タスク内容'] || '',
+            assignee:     row['担当者'] || '',
+            status:       'done',
+            payrollMonth: row['給与対象月'] || '',
+            completedAt:  completedAt,
+            recordDate:   recordDate,
+            workMinutes:  row['作業時間（分）'] || '',
+            workStart:    row['開始時刻'] || '',
+            workEnd:      row['終了時刻'] || '',
+            headcount:    row['人数'] || '',
+            memo:         row['メモ'] || ''
+          };
+        });
+        return payrollRecordsCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchPayrollRecordsFromSheet] 失敗:', e);
+        return [];
+      });
+  }
+
   // ===== 給与計算記録 / 完了一覧 レンダー =====
 
   // アーカイブリストの共通レンダー
@@ -2352,9 +2439,9 @@
   }
 
   function renderPayrollRecord() {
-    var tasks = loadTasks().filter(function(t) {
-      return isArchivedTask(t) && isPayrollTask(t);
-    });
+    // 給与計算記録シートのデータを使用
+    var tasks = loadPayrollRecords();
+    console.log('[renderPayrollRecord] 給与計算記録シートから表示:', tasks.length, '件');
     var q = ((document.getElementById('payroll-record-search') || {}).value || '').toLowerCase().trim();
 
     var filtered = q
@@ -3570,20 +3657,21 @@
 
     closeTodoDetailModal();
 
-    // 完了になる場合：GAS保存成功を待ってからUI更新
+    // 完了になる場合：GAS completeTodo で一括処理
     if (newStatus === 'done' && oldStatus !== 'done') {
-      var taskCopy = Object.assign({}, target, editData);
-      console.log('[saveTodoDetailModal] 完了処理開始:', taskCopy.id, taskCopy.category, taskCopy.text);
-      syncTaskToSheet(taskCopy).then(function(success) {
+      console.log('[saveTodoDetailModal] 完了処理開始:', target.id, target.category, target.text);
+      // まず完了以外のフィールド変更を先にGASに送信
+      var taskCopy = Object.assign({}, target, editData, { status: oldStatus });
+      syncTaskToSheet(taskCopy).then(function() {
+        return completeTodo(target.id);
+      }).then(function(success) {
         if (success) {
-          console.log('[saveTodoDetailModal] GAS保存成功 → UI更新');
-          Object.assign(target, editData);
-          saveTasks(tasks);
+          console.log('[saveTodoDetailModal] 完了処理成功 → 再取得');
+          addActivity('todo_updated', actText(editData.client || target.client, editData.text || target.text, ' を更新（完了）'));
+          refreshFromSheet().then(function() { renderCalendar(); });
+        } else {
+          console.log('[saveTodoDetailModal] 完了処理失敗 → TODO維持');
           renderTasks();
-          updateAllStats();
-          renderCalendar();
-          addActivity('todo_updated', actText(target.client, target.text, ' を更新（完了）'));
-          fetchRecordsFromSheet().then(function() { renderDoneList(); });
         }
       });
     } else {
@@ -3954,11 +4042,15 @@
     var d = document.getElementById('rec-date');
     if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
   })();
-  // スプレッドシートからタスク・記録を取得して初期表示
-  Promise.all([fetchTasksFromSheet(), fetchRecordsFromSheet()]).then(function() {
+  // スプレッドシートからタスク・記録・給与計算記録を取得して初期表示
+  Promise.all([
+    fetchTasksFromSheet(),
+    fetchRecordsFromSheet(),
+    fetchPayrollRecordsFromSheet()
+  ]).then(function() {
     renderTasks();
     updateAllStats();
-    console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件');
+    console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, 給与計算記録:', loadPayrollRecords().length, '件');
   });
 </script>
 </body>
