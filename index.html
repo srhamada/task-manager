@@ -1871,9 +1871,12 @@
     updateAllStats();
     if (changed) {
       var label = STATUS_META[changed.status] ? STATUS_META[changed.status].label : changed.status;
-      var isPayroll = PAYROLL_CATEGORIES.indexOf(changed.category) >= 0;
       addActivity('todo_status_changed', actText(changed.client, changed.text, ' を' + label + 'に変更'));
       refreshCalendarIfVisible();
+      // 完了になった場合、記録シートへ送信
+      if (changed.status === 'done') {
+        handleTaskCompletion(changed);
+      }
     }
   }
 
@@ -2020,6 +2023,10 @@
       var label = STATUS_META[updated.status] ? '（' + STATUS_META[updated.status].label + '）' : '';
       addActivity('todo_updated', actText(updated.client, updated.text, ' を更新' + label));
       refreshCalendarIfVisible();
+      // 完了になった場合、記録シートへ送信
+      if (updated.status === 'done') {
+        handleTaskCompletion(updated);
+      }
     }
   }
 
@@ -2163,6 +2170,99 @@
   function isPayrollTask(t) {
     var cat = t.category || t.text || '';
     return PAYROLL_CATEGORIES.indexOf(cat) !== -1;
+  }
+
+  // ===== 完了時に記録シートへ送信 =====
+
+  // タスクを完了にしたとき、業務種別に応じて「記録」or「給与計算記録」シートへ追加
+  function postCompletedTaskToRecord(task, extra) {
+    var today = new Date().toISOString().slice(0, 10);
+    var assigneeName = ASSIGNEE_LABEL[task.assignee] || task.assignee || '';
+    var isPayroll = isPayrollTask(task);
+    var sheetName = isPayroll ? '給与計算記録' : '記録';
+
+    var postData = {
+      sheet: sheetName,
+      '元タスクID':   task.id,
+      'クライアント': task.client || '',
+      '業務種別':     task.category || '',
+      'タスク内容':   task.text || '',
+      '担当者':       assigneeName,
+      '完了日':       today
+    };
+
+    // 給与計算記録の場合のみ追加フィールド
+    if (isPayroll && extra) {
+      postData['給与対象月'] = extra.payrollMonth || '';
+      postData['人数']       = extra.headcount    || '';
+    }
+
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result && result.error) throw new Error(result.error);
+      // 記録一覧・給与計算記録一覧・時間集計を自動更新
+      renderPayrollRecord();
+      renderDoneList();
+      renderWorkTimeSummary();
+    })
+    .catch(function(e) {
+      console.error('記録シートへの送信に失敗:', e);
+    });
+  }
+
+  // 給与計算タスク完了時に対象月・人数を入力するダイアログ
+  function promptPayrollExtra(task, callback) {
+    // 簡易モーダルを動的に作成
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    var defaultMonth = new Date().toISOString().slice(0, 7);
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:14px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.18);">' +
+        '<h3 style="margin:0 0 18px;font-size:1rem;color:#1a3320;">給与計算記録の追加情報</h3>' +
+        '<div style="margin-bottom:14px;">' +
+          '<label style="font-size:0.82rem;font-weight:600;color:#5a7a5e;display:block;margin-bottom:4px;">給与対象月</label>' +
+          '<input id="payroll-extra-month" type="month" class="form-input" value="' + defaultMonth + '" style="width:100%;padding:8px 10px;" />' +
+        '</div>' +
+        '<div style="margin-bottom:18px;">' +
+          '<label style="font-size:0.82rem;font-weight:600;color:#5a7a5e;display:block;margin-bottom:4px;">人数</label>' +
+          '<input id="payroll-extra-count" type="number" min="0" class="form-input" placeholder="例：15" style="width:100%;padding:8px 10px;" />' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;">' +
+          '<button id="payroll-extra-ok" class="btn btn-primary" style="flex:1;">確定</button>' +
+          '<button id="payroll-extra-skip" class="btn btn-secondary" style="flex:1;">スキップ</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    function finish(extra) {
+      document.body.removeChild(overlay);
+      callback(extra);
+    }
+    document.getElementById('payroll-extra-ok').onclick = function() {
+      finish({
+        payrollMonth: document.getElementById('payroll-extra-month').value || '',
+        headcount:    document.getElementById('payroll-extra-count').value || ''
+      });
+    };
+    document.getElementById('payroll-extra-skip').onclick = function() {
+      finish({ payrollMonth: '', headcount: '' });
+    };
+  }
+
+  // 完了処理の共通エントリ：給与計算なら追加入力→送信、それ以外は即送信
+  function handleTaskCompletion(task) {
+    if (isPayrollTask(task)) {
+      promptPayrollExtra(task, function(extra) {
+        postCompletedTaskToRecord(task, extra);
+      });
+    } else {
+      postCompletedTaskToRecord(task, null);
+    }
   }
 
   // ===== 給与計算記録 / 完了一覧 レンダー =====
@@ -3409,10 +3509,13 @@
   function saveTodoDetailModal() {
     var idVal = parseInt(document.getElementById('todo-modal-id').value, 10);
     if (!idVal) return;
+    var oldTask = loadTasks().filter(function(t) { return t.id === idVal; })[0];
+    var oldStatus = oldTask ? oldTask.status : '';
     var tasks = loadTasks();
+    var updatedTask = null;
     tasks = tasks.map(function(t) {
       if (t.id !== idVal) return t;
-      return Object.assign({}, t, {
+      updatedTask = Object.assign({}, t, {
         client:      document.getElementById('todo-modal-client').value.trim(),
         text:        document.getElementById('todo-modal-text').value.trim() || t.text,
         assignee:    document.getElementById('todo-modal-assignee').value,
@@ -3423,6 +3526,7 @@
         workEnd:     document.getElementById('todo-modal-work-end').value,
         workMinutes: parseInt(document.getElementById('todo-modal-work-minutes').value || '0', 10) || 0
       });
+      return updatedTask;
     });
     saveTasks(tasks);
     closeTodoDetailModal();
@@ -3432,6 +3536,10 @@
     var _todoClient = document.getElementById('todo-modal-client').value.trim();
     var _todoText = document.getElementById('todo-modal-text').value.trim() || '';
     addActivity('todo_updated', actText(_todoClient, _todoText, ' を更新'));
+    // 完了に変更された場合、記録シートへ送信
+    if (updatedTask && updatedTask.status === 'done' && oldStatus !== 'done') {
+      handleTaskCompletion(updatedTask);
+    }
   }
 
   // ===== 作業時間ヘルパー =====
