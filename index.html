@@ -1457,7 +1457,7 @@
     if (name === 'consultation')   initConsultPage();
     if (name === 'inquiry')        initInquiryPage();
     if (name === 'calendar')       initCalendarPage();
-    if (name === 'dashboard')      { renderTasks(); updateAllStats(); renderActivityList(); }
+    if (name === 'dashboard')      { refreshFromSheet(); renderActivityList(); }
   }
 
   function showPageByName(name) {
@@ -1556,8 +1556,9 @@
     }).join('');
   }
 
-  // ===== TODO / localStorage =====
-  var STORAGE_KEY = 'sr_tasks';
+  // ===== TODO / Google Sheets連携 =====
+  var GAS_URL = 'https://script.google.com/macros/s/AKfycbyPpjS-Ni3Mi-PQvEXjIsNCgwirSkOfUgalWySBOuj1UbdiAsYo4xsudLR-A_iC0Cw4/exec';
+  var tasksCache = [];  // スプレッドシートから取得したタスクのキャッシュ
   var currentFilter = '';  // '' = すべて, 'hamada' or 'takasaki'
 
   var STATUS_META = {
@@ -1639,36 +1640,77 @@
     { id: 5, status: 'done',       client: '株式会社ナデシコ', text: '社会保険料の納付書送付',     assignee: 'hamada',   due: '' }
   ];
 
+  // キャッシュからタスクを返す（同期）
   function loadTasks() {
-    var raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) {
-      saveTasks(SAMPLE_TASKS);
-      return JSON.parse(JSON.stringify(SAMPLE_TASKS));
-    }
-    try {
-      var tasks = JSON.parse(raw);
-      tasks = tasks.map(function(t) {
-        if (!t.status) {
-          t.status = t.priority ? (PRIORITY_TO_STATUS[t.priority] || 'todo') : 'todo';
-          delete t.priority;
-        }
-        if (t.due        === undefined) t.due        = '';
-        if (t.client     === undefined) t.client     = '';
-        if (t.assignee   === undefined) t.assignee   = '';
-        if (t.category   === undefined) t.category   = '';
-        if (t.recordDate === undefined) t.recordDate = '';
-        if (t.detail     === undefined) t.detail     = '';
-        if (t.memo       === undefined) t.memo       = '';
-        // レガシー日本語 assignee を正規 ID に変換
-        if (ASSIGNEE_NORMALIZE[t.assignee]) t.assignee = ASSIGNEE_NORMALIZE[t.assignee];
-        return t;
-      });
-      return tasks;
-    } catch(e) { return []; }
+    return tasksCache.slice();
   }
 
+  // saveTasks は互換性のため残す（キャッシュ更新のみ）
   function saveTasks(tasks) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    tasksCache = tasks.slice();
+  }
+
+  // スプレッドシートの列名 → 内部プロパティ名のマッピング
+  var SHEET_TO_PROP = {
+    'ID': 'id', 'クライアント': 'client', '業務種別': 'category',
+    'タスク内容': 'text', '期限': 'due', '担当者': 'assignee',
+    '状態': 'status', '優先度': 'priority', '作成日': 'createdAt', '更新日': 'updatedAt'
+  };
+
+  // 状態の日本語 → 内部ステータスコード変換
+  var STATUS_JP_TO_CODE = {
+    '未着手': 'todo', '進行中': 'inprogress', '確認待ち': 'waiting', '完了': 'done'
+  };
+  var STATUS_CODE_TO_JP = { 'todo': '未着手', 'inprogress': '進行中', 'waiting': '確認待ち', 'done': '完了' };
+
+  // GASからタスク一覧を取得してキャッシュに格納
+  function fetchTasksFromSheet() {
+    return fetch(GAS_URL)
+      .then(function(res) {
+        if (!res.ok) throw new Error('データ取得に失敗しました（HTTP ' + res.status + '）');
+        return res.json();
+      })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) {
+          if (rows && Array.isArray(rows.data)) rows = rows.data;
+          else throw new Error('サーバーから不正なデータ形式が返されました');
+        }
+        tasksCache = rows.map(function(row) {
+          var t = {};
+          Object.keys(SHEET_TO_PROP).forEach(function(jp) {
+            t[SHEET_TO_PROP[jp]] = row[jp] !== undefined ? row[jp] : (row[SHEET_TO_PROP[jp]] || '');
+          });
+          // IDを数値化
+          t.id = parseInt(t.id, 10) || 0;
+          // 状態コード変換（日本語 → コード）
+          if (STATUS_JP_TO_CODE[t.status]) t.status = STATUS_JP_TO_CODE[t.status];
+          if (!t.status) t.status = 'todo';
+          // 担当者正規化
+          if (ASSIGNEE_NORMALIZE[t.assignee]) t.assignee = ASSIGNEE_NORMALIZE[t.assignee];
+          // 未定義フィールドの初期化
+          if (t.due      === undefined) t.due      = '';
+          if (t.client   === undefined) t.client   = '';
+          if (t.assignee === undefined) t.assignee = '';
+          if (t.category === undefined) t.category = '';
+          if (t.text     === undefined) t.text     = '';
+          // text が空で category がある場合、category を text に
+          if (!t.text && t.category) t.text = t.category;
+          return t;
+        });
+        return tasksCache;
+      })
+      .catch(function(e) {
+        alert('タスクの読み込みに失敗しました: ' + e.message);
+        return [];
+      });
+  }
+
+  // データ再取得して画面更新
+  function refreshFromSheet() {
+    return fetchTasksFromSheet().then(function() {
+      renderTasks();
+      updateAllStats();
+    });
   }
 
   function esc(str) {
@@ -1829,33 +1871,55 @@
       : typeEl.value;
     if (!text) { typeEl.focus(); return; }
 
-    var tasks = loadTasks();
-    var maxId = 0;
-    tasks.forEach(function(t) { if (t.id > maxId) maxId = t.id; });
     var category = (typeEl.value === 'その他') ? 'その他' : typeEl.value;
-    tasks.push({
-      id:         maxId + 1,
-      client:     clientEl   ? clientEl.value.trim() : '',
-      text:       text,
-      assignee:   assigneeEl ? assigneeEl.value       : '',
-      status:     statusEl.value,
-      due:        dueEl      ? dueEl.value            : '',
-      category:   category,
-      recordDate: '',
-      detail:     '',
-      memo:       ''
+    var statusJp = STATUS_CODE_TO_JP[statusEl.value] || statusEl.value;
+    var assigneeName = '';
+    if (assigneeEl) {
+      var aVal = assigneeEl.value;
+      assigneeName = ASSIGNEE_LABEL[aVal] || aVal || '';
+    }
+    var now = new Date().toISOString().slice(0, 10);
+
+    var postData = {
+      'クライアント': clientEl ? clientEl.value.trim() : '',
+      '業務種別':     category,
+      'タスク内容':   text,
+      '期限':         dueEl ? dueEl.value : '',
+      '担当者':       assigneeName,
+      '状態':         statusJp,
+      '優先度':       '',
+      '作成日':       now,
+      '更新日':       now
+    };
+
+    // 追加ボタンを無効化
+    var addBtn = document.querySelector('[onclick="addTask()"]');
+    if (addBtn) { addBtn.disabled = true; addBtn.textContent = '送信中…'; }
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result && result.error) throw new Error(result.error);
+      var taskClient = clientEl ? clientEl.value.trim() : '';
+      addActivity('todo_created', actText(taskClient, text, ' をTODOに追加'));
+      typeEl.value = '';
+      if (otherEl)    { otherEl.value = ''; otherEl.style.display = 'none'; }
+      if (clientEl)   clientEl.value   = '';
+      if (assigneeEl) assigneeEl.value = '';
+      if (dueEl)      dueEl.value      = '';
+      typeEl.focus();
+      return refreshFromSheet();
+    })
+    .catch(function(e) {
+      alert('タスクの追加に失敗しました: ' + e.message);
+    })
+    .then(function() {
+      if (addBtn) { addBtn.disabled = false; addBtn.textContent = '追加'; }
     });
-    saveTasks(tasks);
-    renderTasks();
-    updateAllStats();
-    var taskClient = clientEl ? clientEl.value.trim() : '';
-    addActivity('todo_created', actText(taskClient, text, ' をTODOに追加'));
-    typeEl.value = '';
-    if (otherEl)    { otherEl.value = ''; otherEl.style.display = 'none'; }
-    if (clientEl)   clientEl.value   = '';
-    if (assigneeEl) assigneeEl.value = '';
-    if (dueEl)      dueEl.value      = '';
-    typeEl.focus();
   }
 
   function deleteTask(id) {
@@ -2012,37 +2076,43 @@
     }
     if (titleEl) titleEl.style.borderColor = '';
 
-    var tasks = loadTasks();
-    var maxId = 0;
-    tasks.forEach(function(t) { if (t.id > maxId) maxId = t.id; });
+    var statusCode = (document.getElementById('rec-status')   || {}).value || 'todo';
+    var statusJp   = STATUS_CODE_TO_JP[statusCode] || statusCode;
+    var assigneeVal = (document.getElementById('rec-assignee') || {}).value || '';
+    var assigneeName = ASSIGNEE_LABEL[assigneeVal] || assigneeVal || '';
+    var clientVal    = (document.getElementById('record-client') || {}).value || '';
+    var now = new Date().toISOString().slice(0, 10);
 
-    tasks.push({
-      id:         maxId + 1,
-      status:     (document.getElementById('rec-status')   || {}).value || 'todo',
-      client:     (document.getElementById('record-client') || {}).value || '',
-      text:       title,
-      assignee:   (document.getElementById('rec-assignee') || {}).value || '',
-      due:        (document.getElementById('rec-due')       || {}).value || '',
-      category:   category,
-      recordDate:   (document.getElementById('rec-date')         || {}).value || '',
-      detail:       ((document.getElementById('rec-detail')      || {}).value || '').trim(),
-      memo:         ((document.getElementById('rec-memo')        || {}).value || '').trim(),
-      workStart:    (document.getElementById('rec-work-start')   || {}).value || '',
-      workEnd:      (document.getElementById('rec-work-end')     || {}).value || '',
-      workMinutes:  parseInt((document.getElementById('rec-work-minutes') || {}).value || '0', 10) || 0,
-      billing:      (document.getElementById('rec-billing')      || {}).value || ''
+    var postData = {
+      'クライアント': clientVal,
+      '業務種別':     category,
+      'タスク内容':   title,
+      '期限':         (document.getElementById('rec-due') || {}).value || '',
+      '担当者':       assigneeName,
+      '状態':         statusJp,
+      '優先度':       '',
+      '作成日':       now,
+      '更新日':       now
+    };
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result && result.error) throw new Error(result.error);
+      var actType = PAYROLL_CATEGORIES.indexOf(category) >= 0 ? 'payroll' : 'record';
+      addActivity(actType, actText(clientVal, title, ' を記録に追加'));
+      clearRecord();
+      var msg = document.getElementById('rec-save-msg');
+      if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 4000); }
+      return refreshFromSheet();
+    })
+    .catch(function(e) {
+      alert('記録の保存に失敗しました: ' + e.message);
     });
-
-    saveTasks(tasks);
-    renderTasks();
-    updateAllStats();
-    var recClient = (document.getElementById('record-client') || {}).value || '';
-    var actType   = PAYROLL_CATEGORIES.indexOf(category) >= 0 ? 'payroll' : 'record';
-    addActivity(actType, actText(recClient, title, ' を記録に追加'));
-    clearRecord();
-
-    var msg = document.getElementById('rec-save-msg');
-    if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 4000); }
   }
 
   function clearRecord() {
@@ -3670,17 +3740,20 @@
 
   // ===== 初期化 =====
   populateCategorySelects();   // new-task-type と rec-category を TASK_TYPES から構築
-  renderTasks();
   updateFilterButtons();
   updateClientStat();
   rebuildTaskClientSelect();
-  updateAllStats();
   renderActivityList();
   // 記録追加フォームの記録日を今日に初期化
   (function() {
     var d = document.getElementById('rec-date');
     if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
   })();
+  // スプレッドシートからタスクを取得して初期表示
+  fetchTasksFromSheet().then(function() {
+    renderTasks();
+    updateAllStats();
+  });
 </script>
 </body>
 </html>
