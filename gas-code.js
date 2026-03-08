@@ -47,13 +47,17 @@ function doGet(e) {
 // --------------- doPost: アクション振り分け ---------------
 function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
+    var rawContents = e.postData.contents;
+    Logger.log('[doPost] ★受信rawデータ: ' + rawContents);
+    var data = JSON.parse(rawContents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
     Logger.log('[doPost] action=' + (data.action || '(なし)'));
+    Logger.log('[doPost] ★data全体: ' + JSON.stringify(data));
 
     // ── TODO完了アクション（完了処理を一括実行） ──
     if (data.action === 'completeTodo') {
+      Logger.log('[doPost] ★completeTodo呼出前: 開始時刻=' + data['開始時刻'] + ', 終了時刻=' + data['終了時刻'] + ', 作業時間=' + data['作業時間']);
       return handleCompleteTodo_(ss, data);
     }
 
@@ -193,6 +197,12 @@ function handleCompleteTodo_(ss, data) {
     return jsonResponse_({ error: '保存先シート「' + targetSheetName + '」が見つかりません' });
   }
 
+  // --- POSTデータから作業時間を取得（フロントから直接渡される） ---
+  var postWorkStart   = data['開始時刻'] || '';
+  var postWorkEnd     = data['終了時刻'] || '';
+  var postWorkMinutes = data['作業時間'] || '';
+  Logger.log('[completeTodo] POST受信: 開始時刻=' + postWorkStart + ', 終了時刻=' + postWorkEnd + ', 作業時間=' + postWorkMinutes);
+
   if (isPayroll) {
     // --- 給与計算記録シートへ保存 ---
     var payrollMonth = '';
@@ -205,7 +215,7 @@ function handleCompleteTodo_(ss, data) {
         payrollMonth = String(dueVal);
       }
     }
-    var workMinutes = convertToMinutes_(tv('作業時間'));
+    var workMinutes = convertToMinutes_(postWorkMinutes);
     var newId = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMddHHmmss');
 
     var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
@@ -221,10 +231,12 @@ function handleCompleteTodo_(ss, data) {
       '',                    // I: 人数（空欄）
       '',                    // J: メモ（空欄）
       '',                    // K: （空欄）
-      tv('開始時刻'),        // L: 開始時刻
-      tv('終了時刻'),        // M: 終了時刻
-      tv('作業時間')         // N: 作業時間
+      postWorkStart,         // L: 開始時刻（POSTから）
+      postWorkEnd,           // M: 終了時刻（POSTから）
+      postWorkMinutes        // N: 作業時間（POSTから）
     ];
+    Logger.log('[completeTodo] ★給与計算記録 書込直前: payrollRow[11]=' + payrollRow[11] + ', [12]=' + payrollRow[12] + ', [13]=' + payrollRow[13]);
+    Logger.log('[completeTodo] ★payrollRow全体: ' + JSON.stringify(payrollRow));
     targetSheet.appendRow(payrollRow);
     Logger.log('[completeTodo] 給与計算記録に追加完了: 元ID=' + tv('ID') + ', クライアント=' + tv('クライアント'));
 
@@ -243,12 +255,14 @@ function handleCompleteTodo_(ss, data) {
       tv('作成日'),          // I
       nowJST2,               // J: 更新日（JST）
       nowJST2,               // K: 完了日時（JST）
-      tv('開始時刻'),        // L
-      tv('終了時刻'),        // M
-      tv('作業時間'),        // N
+      postWorkStart,         // L: 開始時刻（POSTから）
+      postWorkEnd,           // M: 終了時刻（POSTから）
+      postWorkMinutes,       // N: 作業時間（POSTから）
       'TODO',                // O: 元シート
       rowNum                 // P: 元行番号
     ];
+    Logger.log('[completeTodo] ★記録シート 書込直前: recordRow[11]=' + recordRow[11] + ', [12]=' + recordRow[12] + ', [13]=' + recordRow[13]);
+    Logger.log('[completeTodo] ★recordRow全体: ' + JSON.stringify(recordRow));
     targetSheet.appendRow(recordRow);
     Logger.log('[completeTodo] 記録シートに追加完了: ID=' + tv('ID') + ', 業務種別=' + category + ', タスク=' + tv('タスク内容'));
   }
