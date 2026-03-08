@@ -1740,9 +1740,29 @@
   // 日付文字列を正規化（ISO文字列やDateオブジェクトをJST基準のyyyy-mm-ddに変換）
   function normalizeDate(val) {
     if (!val) return '';
-    var s = String(val);
+    // 数値（Googleスプレッドシートのシリアル値）を処理
+    // シリアル値: 1899-12-30 を起点とした日数
+    if (typeof val === 'number' || /^\d{5}(\.\d+)?$/.test(String(val).trim())) {
+      var serial = Number(val);
+      if (serial > 0 && serial < 200000) {
+        var msPerDay = 86400000;
+        // Google Sheets epoch: 1899-12-30
+        var epoch = new Date(Date.UTC(1899, 11, 30));
+        var d = new Date(epoch.getTime() + serial * msPerDay);
+        var y = d.getUTCFullYear();
+        var m = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+        var day = ('0' + d.getUTCDate()).slice(-2);
+        return y + '-' + m + '-' + day;
+      }
+    }
+    var s = String(val).trim();
     // 既に yyyy-mm-dd 形式ならそのまま返す
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // yyyy/mm/dd 形式をハイフン区切りに正規化
+    if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s)) {
+      var parts = s.split('/');
+      return parts[0] + '-' + ('0' + parts[1]).slice(-2) + '-' + ('0' + parts[2]).slice(-2);
+    }
     // ISO文字列（例: 2026-03-08T15:00:00.000Z）やDate互換文字列をJSTで解釈
     var d = new Date(s);
     if (isNaN(d.getTime())) return '';
@@ -2607,35 +2627,39 @@
   }
 
   function updateUrgentStat() {
-    var today = new Date(); today.setHours(0,0,0,0);
-    // 今週末（日曜 23:59）を計算
-    var day = today.getDay();
-    var toSunday = (day === 0) ? 0 : 7 - day;
-    var weekEnd = new Date(today);
-    weekEnd.setDate(today.getDate() + toSunday);
+    // 日本時間の「今日」を基準にする（環境差を防ぐ）
+    var nowJST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    var todayStr = nowJST.getUTCFullYear() + '-' +
+                   ('0' + (nowJST.getUTCMonth() + 1)).slice(-2) + '-' +
+                   ('0' + nowJST.getUTCDate()).slice(-2);
+    var todayMs = new Date(todayStr + 'T00:00:00').getTime();
+    var threeDaysLaterMs = todayMs + 3 * 86400000; // 今日+3日（3日以内 = 今日〜3日後の23:59）
 
-    var overdue = 0, thisWeek = 0;
+    var overdue = 0, soon = 0;
 
-    // TODOと同じフィルタ：アーカイブ済み（完了）を除く
+    // 未完了タスクのみ対象
     loadTasks().forEach(function(t) {
       if (isArchivedTask(t)) return;          // 完了タスクは除外
-      if (!t.due) return;                     // 期限なしは除外
-      var d = new Date(t.due + 'T00:00:00');
-      if (d < today)                  overdue++;
-      else if (d <= weekEnd)          thisWeek++;
+      // 期限を正規化して検証
+      var dueDateStr = normalizeDate(t.due);
+      if (!dueDateStr) return;                // 期限なし・無効な日付は除外
+      var dueMs = new Date(dueDateStr + 'T00:00:00').getTime();
+      if (isNaN(dueMs)) return;               // 無効な日付は除外
+      if (dueMs < todayMs)                    overdue++;    // 期限切れ（今日より前）
+      else if (dueMs <= threeDaysLaterMs)     soon++;       // 期限間近（今日〜3日以内）
     });
 
-    var total = overdue + thisWeek;
+    var total = overdue + soon;
     var countEl = document.getElementById('stat-urgent-count');
     var subEl   = document.getElementById('stat-urgent-sub');
     if (countEl) countEl.textContent = total + '件';
     if (subEl) {
-      if (overdue > 0 && thisWeek > 0)
-        subEl.textContent = '期限切れ ' + overdue + '件・今週中 ' + thisWeek + '件';
+      if (overdue > 0 && soon > 0)
+        subEl.textContent = '期限切れ ' + overdue + '件・あと3日以内 ' + soon + '件';
       else if (overdue > 0)
         subEl.textContent = '期限切れ ' + overdue + '件';
-      else if (thisWeek > 0)
-        subEl.textContent = '今週中に対応 ' + thisWeek + '件';
+      else if (soon > 0)
+        subEl.textContent = 'あと3日以内に期限 ' + soon + '件';
       else
         subEl.textContent = '期限が近いタスクなし';
     }
