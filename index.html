@@ -4136,7 +4136,9 @@
       '忙しい中いつもありがとうございます'
     ];
     var msg = messages[Math.floor(Math.random() * messages.length)];
-    el.textContent = dateStr + '　' + msg;
+    var emojis = ['🌸','🌼','🌷','🪻','🍀','☀️','🌿','🌱','🐝','🦋'];
+    var emoji = emojis[Math.floor(Math.random() * emojis.length)];
+    el.textContent = dateStr + '　' + msg + ' ' + emoji;
   })();
 
   populateCategorySelects();   // new-task-type と rec-category を TASK_TYPES から構築
