@@ -124,6 +124,9 @@
     .stat-card.blue   { border-color: #26a69a; }
     .stat-card.green  { border-color: #fbc02d; }
     .stat-card.pink   { border-color: #78909c; }
+    .stat-card.amber  { border-color: #ef8c2d; background: #fffaf3; }
+    .stat-card.amber .stat-label { color: #b5651d; }
+    .stat-card.amber .stat-value { color: #d4700a; }
     .stat-label { font-size: 0.8rem; color: #6a8a6e; font-weight: 500; }
     .stat-value { font-size: 2rem; font-weight: 700; color: #1a3320; }
     .stat-sub   { font-size: 0.78rem; color: #8aaa8e; }
@@ -521,15 +524,15 @@
         <div class="stat-value" id="stat-payroll-count">—</div>
         <div class="stat-sub" id="stat-payroll-done">集計中…</div>
       </div>
+      <div class="stat-card amber">
+        <div class="stat-label">期限が近いタスク</div>
+        <div class="stat-value" id="stat-urgent-count">—</div>
+        <div class="stat-sub" id="stat-urgent-sub">集計中…</div>
+      </div>
       <div class="stat-card green">
         <div class="stat-label">行政問い合わせ</div>
         <div class="stat-value" id="stat-inquiry-count">—</div>
         <div class="stat-sub" id="stat-inquiry-done">集計中…</div>
-      </div>
-      <div class="stat-card pink">
-        <div class="stat-label">期限が近いタスク</div>
-        <div class="stat-value" id="stat-urgent-count">—</div>
-        <div class="stat-sub" id="stat-urgent-sub">集計中…</div>
       </div>
     </div>
 
