@@ -1443,7 +1443,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v3 (fetchTasksFromSheet内で即時updateAllStats)');
+  console.log('[app] コードバージョン: 2026-03-08-v4 (クライアント・行政問い合わせ スプレッドシート連携)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1733,12 +1733,18 @@
     return Promise.all([
       fetchTasksFromSheet(),
       fetchRecordsFromSheet(),
-      fetchPayrollRecordsFromSheet()
+      fetchPayrollRecordsFromSheet(),
+      fetchClientsFromSheet(),
+      fetchInquiriesFromSheet()
     ]).then(function() {
       renderTasks();
       updateAllStats();
       renderDoneList();
       renderPayrollRecord();
+      renderClients();
+      updateClientStat();
+      renderInquiryList();
+      updateInquiryStat();
     });
   }
 
@@ -2714,6 +2720,164 @@
 
   // ===== クライアント管理 =====
   var CLIENT_STORAGE_KEY = 'sr_clients';
+  var clientsCache = [];  // スプレッドシートから取得したクライアントのキャッシュ
+
+  // スプレッドシートの列名 → 内部プロパティ名のマッピング（クライアント）
+  var CLIENT_SHEET_TO_PROP = {
+    'client_id': 'id', '会社名': 'name', '業種': 'industry',
+    '従業員数': 'employees', '担当者': 'manager', '連絡先': 'contact',
+    '契約開始日': 'contractStart', 'ステータス': 'status',
+    '給与計算': 'payroll', '締め日': 'payrollCloseDay', '支払日': 'payrollPayDay',
+    'ストレスチェック': 'stressCheck', 'ストレスチェック月': 'stressCheckMonth',
+    'メモ': 'memo', '作成日時': 'createdAt', '更新日時': 'updatedAt', '有効フラグ': 'active'
+  };
+
+  // GASからクライアント一覧を取得
+  function fetchClientsFromSheet() {
+    var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('クライアント');
+    console.log('[fetchClientsFromSheet] 取得開始');
+    return fetch(url)
+      .then(function(res) {
+        if (!res.ok) throw new Error('クライアントデータ取得失敗（HTTP ' + res.status + '）');
+        return res.json();
+      })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) {
+          if (rows && Array.isArray(rows.data)) rows = rows.data;
+          else throw new Error('クライアントデータの形式が不正です');
+        }
+        console.log('[fetchClientsFromSheet] 取得件数:', rows.length);
+        clientsCache = rows.map(function(row) {
+          var c = {};
+          Object.keys(CLIENT_SHEET_TO_PROP).forEach(function(sheetKey) {
+            c[CLIENT_SHEET_TO_PROP[sheetKey]] = row[sheetKey] !== undefined ? row[sheetKey] : '';
+          });
+          c.id = parseInt(c.id, 10) || 0;
+          c.employees = parseInt(c.employees, 10) || 0;
+          if (!c.contact) c.contact = '';
+          if (!c.memo) c.memo = '';
+          return c;
+        }).filter(function(c) {
+          // 有効フラグがFALSEのものは除外
+          return c.active !== 'FALSE' && c.active !== false;
+        });
+        // localStorageにもキャッシュ（オフライン対応）
+        saveClients(clientsCache);
+        return clientsCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchClientsFromSheet] 失敗:', e);
+        // フォールバック: localStorageから読む
+        return loadClients();
+      });
+  }
+
+  // クライアントをスプレッドシートに新規登録
+  function saveClientToSheet(clientData) {
+    var postData = {
+      sheet: 'クライアント',
+      '会社名':           clientData.name || '',
+      '業種':             clientData.industry || '',
+      '従業員数':         clientData.employees || 0,
+      '担当者':           clientData.manager || '',
+      '連絡先':           clientData.contact || '',
+      '契約開始日':       clientData.contractStart || '',
+      'ステータス':       clientData.status || 'active',
+      '給与計算':         clientData.payroll || '',
+      '締め日':           clientData.payrollCloseDay || '',
+      '支払日':           clientData.payrollPayDay || '',
+      'ストレスチェック':   clientData.stressCheck || '',
+      'ストレスチェック月': clientData.stressCheckMonth || '',
+      'メモ':             clientData.memo || ''
+    };
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result && result.error) throw new Error(result.error);
+      console.log('[saveClientToSheet] 保存成功');
+      return result;
+    });
+  }
+
+  // ===== 行政問い合わせ記録 スプレッドシート連携 =====
+  var inquiriesCache = [];
+
+  var INQUIRY_SHEET_TO_PROP = {
+    'inquiry_id': 'id', '日付': 'date', '機関': 'org',
+    'クライアント': 'client', '担当者': 'assignee', '連絡先': 'contact',
+    '内容': 'content', '回答': 'reply', 'ステータス': 'status',
+    '期限': 'due', 'メモ': 'memo',
+    '作成日時': 'createdAt', '更新日時': 'updatedAt', '有効フラグ': 'active'
+  };
+
+  // GASから行政問い合わせ記録一覧を取得
+  function fetchInquiriesFromSheet() {
+    var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('行政問い合わせ記録');
+    console.log('[fetchInquiriesFromSheet] 取得開始');
+    return fetch(url)
+      .then(function(res) {
+        if (!res.ok) throw new Error('行政問い合わせデータ取得失敗（HTTP ' + res.status + '）');
+        return res.json();
+      })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) {
+          if (rows && Array.isArray(rows.data)) rows = rows.data;
+          else throw new Error('行政問い合わせデータの形式が不正です');
+        }
+        console.log('[fetchInquiriesFromSheet] 取得件数:', rows.length);
+        inquiriesCache = rows.map(function(row) {
+          var r = {};
+          Object.keys(INQUIRY_SHEET_TO_PROP).forEach(function(sheetKey) {
+            r[INQUIRY_SHEET_TO_PROP[sheetKey]] = row[sheetKey] !== undefined ? row[sheetKey] : '';
+          });
+          r.id = parseInt(r.id, 10) || 0;
+          r.due = normalizeDate(r.due);
+          r.date = normalizeDate(r.date);
+          return r;
+        }).filter(function(r) {
+          return r.active !== 'FALSE' && r.active !== false;
+        });
+        // localStorageにもキャッシュ
+        saveInquiries(inquiriesCache);
+        return inquiriesCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchInquiriesFromSheet] 失敗:', e);
+        return loadInquiries();
+      });
+  }
+
+  // 行政問い合わせをスプレッドシートに新規登録
+  function saveInquiryToSheet(entry) {
+    var postData = {
+      sheet: '行政問い合わせ記録',
+      '日付':       entry.date || '',
+      '機関':       entry.org || '',
+      'クライアント': entry.client || '',
+      '担当者':     entry.assignee || '',
+      '連絡先':     entry.contact || '',
+      '内容':       entry.content || '',
+      '回答':       entry.reply || '',
+      'ステータス': entry.status || 'inprogress',
+      '期限':       entry.due || '',
+      'メモ':       entry.memo || ''
+    };
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result && result.error) throw new Error(result.error);
+      console.log('[saveInquiryToSheet] 保存成功');
+      return result;
+    });
+  }
 
   // 担当者マスタ（追加する場合はここに名前を追加するだけ）
   var CLIENT_MANAGERS = ['濱田', '髙嵜', '佐藤 花子', '山田 太郎', '鈴木 一郎'];
@@ -2981,24 +3145,42 @@
       memo:             document.getElementById('client-form-memo').value.trim()
     };
     if (idVal) {
+      // 編集（localStorageのみ更新 — 編集のスプレッドシート対応は次段階）
       var editId = parseInt(idVal, 10);
       clients = clients.map(function(c) {
         if (c.id !== editId) return c;
         return Object.assign({}, c, newData);
       });
-    } else {
-      var maxId = 0;
-      clients.forEach(function(c) { if (c.id > maxId) maxId = c.id; });
-      clients.push(Object.assign({ id: maxId + 1 }, newData));
-    }
-    saveClients(clients);
-    closeClientModal();
-    closeClientDetail();
-    renderClients();
-    if (idVal) {
+      saveClients(clients);
+      closeClientModal();
+      closeClientDetail();
+      renderClients();
       addActivity('client', 'クライアント「' + name + '」の情報を更新');
     } else {
-      addActivity('client', '新規クライアント「' + name + '」を登録');
+      // 新規登録 → スプレッドシートに保存
+      saveClientToSheet(newData)
+        .then(function() {
+          addActivity('client', '新規クライアント「' + name + '」を登録');
+          closeClientModal();
+          closeClientDetail();
+          // スプレッドシートから再取得して画面更新
+          return fetchClientsFromSheet();
+        })
+        .then(function() {
+          renderClients();
+          updateClientStat();
+        })
+        .catch(function(e) {
+          alert('クライアントの登録に失敗しました: ' + e.message);
+          // フォールバック: localStorageに保存
+          var maxId = 0;
+          clients.forEach(function(c) { if (c.id > maxId) maxId = c.id; });
+          clients.push(Object.assign({ id: maxId + 1 }, newData));
+          saveClients(clients);
+          closeClientModal();
+          closeClientDetail();
+          renderClients();
+        });
     }
   }
 
@@ -3230,7 +3412,7 @@
     var records = loadInquiries();
 
     var entry = {
-      id:       editId ? parseInt(editId, 10) : (Math.max.apply(null, records.map(function(r){return r.id||0;}).concat([0])) + 1),
+      id:       editId ? parseInt(editId, 10) : 0,
       date:     dateEl.value,
       org:      orgEl.value,
       client:   (document.getElementById('inquiry-client')   || {}).value || '',
@@ -3244,19 +3426,44 @@
     };
 
     if (editId) {
+      // 編集（localStorageのみ更新 — 編集のスプレッドシート対応は次段階）
       records = records.map(function(r) { return r.id === entry.id ? entry : r; });
+      saveInquiries(records);
+      updateInquiryStat();
+      addActivity('inquiry_updated', actText(entry.client, (entry.org || '行政機関') + ' への問い合わせ記録', 'を更新'));
+      clearInquiryForm();
+      document.getElementById('inquiry-form-card').style.display = 'none';
+      var msg = document.getElementById('inquiry-save-msg');
+      if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
+      renderInquiryList();
     } else {
-      records.push(entry);
+      // 新規登録 → スプレッドシートに保存
+      saveInquiryToSheet(entry)
+        .then(function() {
+          addActivity('inquiry_created', actText(entry.client, (entry.org || '行政機関') + ' への問い合わせ記録', 'を追加'));
+          clearInquiryForm();
+          document.getElementById('inquiry-form-card').style.display = 'none';
+          var msg = document.getElementById('inquiry-save-msg');
+          if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
+          // スプレッドシートから再取得して画面更新
+          return fetchInquiriesFromSheet();
+        })
+        .then(function() {
+          renderInquiryList();
+          updateInquiryStat();
+        })
+        .catch(function(e) {
+          alert('問い合わせ記録の登録に失敗しました: ' + e.message);
+          // フォールバック: localStorageに保存
+          entry.id = Math.max.apply(null, records.map(function(r){return r.id||0;}).concat([0])) + 1;
+          records.push(entry);
+          saveInquiries(records);
+          updateInquiryStat();
+          clearInquiryForm();
+          document.getElementById('inquiry-form-card').style.display = 'none';
+          renderInquiryList();
+        });
     }
-
-    saveInquiries(records);
-    updateInquiryStat();
-    addActivity(editId ? 'inquiry_updated' : 'inquiry_created', actText(entry.client, (entry.org || '行政機関') + ' への問い合わせ記録', 'を' + (editId ? '更新' : '追加')));
-    clearInquiryForm();
-    document.getElementById('inquiry-form-card').style.display = 'none';
-    var msg = document.getElementById('inquiry-save-msg');
-    if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
-    renderInquiryList();
   }
 
   function editInquiry(id) {
@@ -4215,19 +4422,25 @@
     var d = document.getElementById('rec-date');
     if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
   })();
-  // スプレッドシートからタスク・記録・給与計算記録を取得して初期表示
+  // スプレッドシートからデータを取得して初期表示
   // ※ タスクの描画とカード統計はfetchTasksFromSheet内で即座に実行される
-  // ※ Promise.allは記録系取得完了後の追加描画用
   Promise.all([
     fetchTasksFromSheet(),
     fetchRecordsFromSheet(),
-    fetchPayrollRecordsFromSheet()
+    fetchPayrollRecordsFromSheet(),
+    fetchClientsFromSheet(),
+    fetchInquiriesFromSheet()
   ]).then(function() {
     console.log('[初期化] Promise.all 完了（全シート取得済み）');
-    console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, 給与計算記録:', loadPayrollRecords().length, '件');
-    // 記録系データが揃った後に完了一覧・給与記録を描画
+    console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件, 行政問い合わせ:', inquiriesCache.length, '件');
+    // 記録系データが揃った後に追加描画
     try { renderDoneList(); } catch(e) { console.error('[初期化] renderDoneList エラー:', e); }
     try { renderPayrollRecord(); } catch(e) { console.error('[初期化] renderPayrollRecord エラー:', e); }
+    // スプレッドシートから取得したクライアント・問い合わせを描画
+    try { renderClients(); } catch(e) { console.error('[初期化] renderClients エラー:', e); }
+    try { updateClientStat(); } catch(e) { console.error('[初期化] updateClientStat エラー:', e); }
+    try { renderInquiryList(); } catch(e) { console.error('[初期化] renderInquiryList エラー:', e); }
+    try { updateInquiryStat(); } catch(e) { console.error('[初期化] updateInquiryStat エラー:', e); }
   }).catch(function(e) {
     console.error('[初期化] データ取得でエラー:', e);
   });

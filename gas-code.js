@@ -1,12 +1,14 @@
 // ============================================================
 // Google Apps Script — 社労士業務管理ツール
-// スプレッドシート: TODO / 記録 / 給与計算記録
+// スプレッドシート: TODO / 記録 / 給与計算記録 / クライアント / 行政問い合わせ記録
 // ============================================================
 
 // --------------- 定数 ---------------
 var SHEET_TODO    = 'TODO';
 var SHEET_RECORD  = '記録';
 var SHEET_PAYROLL = '給与計算記録';
+var SHEET_CLIENT  = 'クライアント';
+var SHEET_INQUIRY = '行政問い合わせ記録';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
@@ -68,10 +70,33 @@ function doPost(e) {
     }
 
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
 
     // IDの自動採番（TODO新規追加時）
     if (sheetName === SHEET_TODO && !data['ID']) {
       data['ID'] = getNextId_(sheet, headers);
+    }
+
+    // クライアントシート: client_id・作成日時・更新日時・有効フラグを自動設定
+    if (sheetName === SHEET_CLIENT) {
+      if (!data['client_id']) {
+        data['client_id'] = getNextIdByCol_(sheet, headers, 'client_id');
+      }
+      if (!data['作成日時']) data['作成日時'] = nowJST;
+      if (!data['更新日時']) data['更新日時'] = nowJST;
+      if (data['有効フラグ'] === undefined || data['有効フラグ'] === '') data['有効フラグ'] = 'TRUE';
+      Logger.log('[doPost] クライアント新規追加: client_id=' + data['client_id']);
+    }
+
+    // 行政問い合わせ記録シート: inquiry_id・作成日時・更新日時・有効フラグを自動設定
+    if (sheetName === SHEET_INQUIRY) {
+      if (!data['inquiry_id']) {
+        data['inquiry_id'] = getNextIdByCol_(sheet, headers, 'inquiry_id');
+      }
+      if (!data['作成日時']) data['作成日時'] = nowJST;
+      if (!data['更新日時']) data['更新日時'] = nowJST;
+      if (data['有効フラグ'] === undefined || data['有効フラグ'] === '') data['有効フラグ'] = 'TRUE';
+      Logger.log('[doPost] 行政問い合わせ新規追加: inquiry_id=' + data['inquiry_id']);
     }
 
     var row = headers.map(function(h) {
@@ -297,6 +322,19 @@ function jsonResponse_(obj) {
 
 function getNextId_(sheet, headers) {
   var idCol = headers.indexOf('ID');
+  if (idCol === -1) return 1;
+  var data = sheet.getDataRange().getValues();
+  var maxId = 0;
+  for (var i = 1; i < data.length; i++) {
+    var v = parseInt(data[i][idCol], 10);
+    if (v > maxId) maxId = v;
+  }
+  return maxId + 1;
+}
+
+// 指定カラム名でID採番（クライアント・行政問い合わせ用）
+function getNextIdByCol_(sheet, headers, colName) {
+  var idCol = headers.indexOf(colName);
   if (idCol === -1) return 1;
   var data = sheet.getDataRange().getValues();
   var maxId = 0;
