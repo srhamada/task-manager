@@ -1437,7 +1437,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v11 (アクティビティ●のみ色分け)');
+  console.log('[app] コードバージョン: 2026-03-08-v12 (アクティビティ●色デバッグ)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1534,11 +1534,11 @@
 
   // 操作種別ごとの●色
   var OP_DOT_COLOR = {
-    complete: '#4caf50',  // 緑：完了
-    add:      '#1976d2',  // 青：追加
-    update:   '#90a4ae',  // グレー：更新
-    delete:   '#90a4ae',  // グレー：削除
-    other:    '#bdbdbd'   // 薄グレー：その他
+    complete: '#FF7F50',  // コーラル：完了
+    add:      '#54acdb',  // 青：追加
+    update:   '#90e667',  // 黄緑：更新
+    delete:   '#bdbdbd',  // グレー：削除
+    other:    '#bdbdbd'   // グレー：その他
   };
 
   // テキストとtypeから操作種別を判定
@@ -1563,6 +1563,7 @@
     list.innerHTML = acts.map(function(a) {
       var op = detectActOperation(a);
       var dotColor = OP_DOT_COLOR[op] || OP_DOT_COLOR.other;
+      console.log('[activity] type=' + a.type + ', op=' + op + ', color=' + dotColor + ', text=' + a.text);
       return '<li class="activity-item">' +
         '<span class="activity-dot" style="background:' + dotColor + ';"></span>' +
         '<span class="activity-text">' + esc(a.text) + '</span>' +
