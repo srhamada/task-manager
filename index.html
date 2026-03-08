@@ -1437,7 +1437,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v10 (アクティビティ色分け改善)');
+  console.log('[app] コードバージョン: 2026-03-08-v11 (アクティビティ●のみ色分け)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1536,7 +1536,7 @@
   var OP_DOT_COLOR = {
     complete: '#4caf50',  // 緑：完了
     add:      '#1976d2',  // 青：追加
-    update:   '#ffa000',  // 橙：更新
+    update:   '#90a4ae',  // グレー：更新
     delete:   '#90a4ae',  // グレー：削除
     other:    '#bdbdbd'   // 薄グレー：その他
   };
