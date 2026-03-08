@@ -1680,6 +1680,11 @@
           else throw new Error('サーバーから不正なデータ形式が返されました');
         }
         console.log('[fetchTasksFromSheet] 取得件数: ' + rows.length);
+        // 先頭1件の生データをログ出力（フィールド名・値の確認用）
+        if (rows.length > 0) {
+          console.log('[fetchTasksFromSheet] 生データ1件目のキー:', Object.keys(rows[0]));
+          console.log('[fetchTasksFromSheet] 生データ1件目:', JSON.stringify(rows[0]));
+        }
         tasksCache = rows.map(function(row) {
           var t = {};
           Object.keys(SHEET_TO_PROP).forEach(function(jp) {
@@ -1739,34 +1744,41 @@
 
   // 日付文字列を正規化（ISO文字列やDateオブジェクトをJST基準のyyyy-mm-ddに変換）
   function normalizeDate(val) {
-    if (!val) return '';
+    if (val === null || val === undefined || val === '') return '';
     // 数値（Googleスプレッドシートのシリアル値）を処理
-    // シリアル値: 1899-12-30 を起点とした日数
-    if (typeof val === 'number' || /^\d{5}(\.\d+)?$/.test(String(val).trim())) {
-      var serial = Number(val);
-      if (serial > 0 && serial < 200000) {
-        var msPerDay = 86400000;
-        // Google Sheets epoch: 1899-12-30
-        var epoch = new Date(Date.UTC(1899, 11, 30));
-        var d = new Date(epoch.getTime() + serial * msPerDay);
-        var y = d.getUTCFullYear();
-        var m = ('0' + (d.getUTCMonth() + 1)).slice(-2);
-        var day = ('0' + d.getUTCDate()).slice(-2);
-        return y + '-' + m + '-' + day;
-      }
+    // シリアル値: 1899-12-30 を起点とした日数（2020年≒43831, 2030年≒47484）
+    var num = Number(val);
+    if (!isNaN(num) && num > 30000 && num < 100000) {
+      var msPerDay = 86400000;
+      var epoch = new Date(Date.UTC(1899, 11, 30));
+      var d = new Date(epoch.getTime() + Math.floor(num) * msPerDay);
+      var y = d.getUTCFullYear();
+      var m = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+      var day = ('0' + d.getUTCDate()).slice(-2);
+      return y + '-' + m + '-' + day;
     }
     var s = String(val).trim();
+    if (!s) return '';
     // 既に yyyy-mm-dd 形式ならそのまま返す
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    // yyyy/mm/dd 形式をハイフン区切りに正規化
+    // yyyy/mm/dd または yyyy/m/d 形式
     if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s)) {
       var parts = s.split('/');
       return parts[0] + '-' + ('0' + parts[1]).slice(-2) + '-' + ('0' + parts[2]).slice(-2);
     }
-    // ISO文字列（例: 2026-03-08T15:00:00.000Z）やDate互換文字列をJSTで解釈
+    // yyyy-mm-ddT... 形式（ISO文字列の先頭10文字がyyyy-mm-ddならそれを使う）
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+      // GASからのISO文字列はUTCのため、JSTに直す
+      var d = new Date(s);
+      if (isNaN(d.getTime())) return '';
+      var jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+      return jst.getUTCFullYear() + '-' +
+             ('0' + (jst.getUTCMonth() + 1)).slice(-2) + '-' +
+             ('0' + jst.getUTCDate()).slice(-2);
+    }
+    // その他のDate互換文字列をJSTで解釈
     var d = new Date(s);
     if (isNaN(d.getTime())) return '';
-    // JST（UTC+9）に変換して日付部分を取得
     var jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
     var y = jst.getUTCFullYear();
     var m = ('0' + (jst.getUTCMonth() + 1)).slice(-2);
@@ -2627,26 +2639,46 @@
   }
 
   function updateUrgentStat() {
-    // 日本時間の「今日」を基準にする（環境差を防ぐ）
-    var nowJST = new Date(Date.now() + 9 * 60 * 60 * 1000);
-    var todayStr = nowJST.getUTCFullYear() + '-' +
-                   ('0' + (nowJST.getUTCMonth() + 1)).slice(-2) + '-' +
-                   ('0' + nowJST.getUTCDate()).slice(-2);
-    var todayMs = new Date(todayStr + 'T00:00:00').getTime();
-    var threeDaysLaterMs = todayMs + 3 * 86400000; // 今日+3日（3日以内 = 今日〜3日後の23:59）
+    console.log('========== [updateUrgentStat] 実行開始 ==========');
+    // getDueInfo と同じ方式で「今日」を算出（ローカル時間の0時基準）
+    var today = new Date(); today.setHours(0,0,0,0);
+    var todayMs = today.getTime();
+    var threeDaysLaterMs = todayMs + 3 * 86400000;
 
     var overdue = 0, soon = 0;
+    var tasks = loadTasks();
 
-    // 未完了タスクのみ対象
-    loadTasks().forEach(function(t) {
-      if (isArchivedTask(t)) return;          // 完了タスクは除外
-      // 期限を正規化して検証
+    console.log('[updateUrgentStat] 判定基準日:', today.toISOString(), '全タスク数:', tasks.length);
+
+    tasks.forEach(function(t) {
+      // 完了判定
+      var archived = isArchivedTask(t);
+      if (archived) return;
+
+      // 期限を再度正規化して確実にyyyy-mm-dd形式にする
       var dueDateStr = normalizeDate(t.due);
-      if (!dueDateStr) return;                // 期限なし・無効な日付は除外
+      if (!dueDateStr) return;
+
       var dueMs = new Date(dueDateStr + 'T00:00:00').getTime();
-      if (isNaN(dueMs)) return;               // 無効な日付は除外
-      if (dueMs < todayMs)                    overdue++;    // 期限切れ（今日より前）
-      else if (dueMs <= threeDaysLaterMs)     soon++;       // 期限間近（今日〜3日以内）
+      if (isNaN(dueMs)) return;
+
+      if (dueMs < todayMs) {
+        overdue++;
+      } else if (dueMs <= threeDaysLaterMs) {
+        soon++;
+      }
+    });
+
+    // 診断ログ（問題の切り分け用）
+    console.log('[updateUrgentStat] 結果 → 期限切れ:', overdue, '件, 3日以内:', soon, '件');
+    // 未完了で期限ありのタスクを全てログ出力
+    tasks.forEach(function(t) {
+      if (isArchivedTask(t)) return;
+      var dueDateStr = normalizeDate(t.due);
+      if (!dueDateStr) return;
+      var dueMs = new Date(dueDateStr + 'T00:00:00').getTime();
+      var diffDays = Math.round((dueMs - todayMs) / 86400000);
+      console.log('[updateUrgentStat] ID=' + t.id + ' status=' + t.status + ' recorded=' + t.recorded + ' due(raw)=' + t.due + ' due(正規化)=' + dueDateStr + ' 残日数=' + diffDays);
     });
 
     var total = overdue + soon;
@@ -2666,10 +2698,12 @@
   }
 
   function updateAllStats() {
-    updateProcedureStat();
-    updatePayrollStat();
-    updateUrgentStat();
-    updateInquiryStat();
+    console.log('[updateAllStats] 開始');
+    try { updateProcedureStat(); } catch(e) { console.error('[updateAllStats] updateProcedureStat エラー:', e); }
+    try { updatePayrollStat(); }   catch(e) { console.error('[updateAllStats] updatePayrollStat エラー:', e); }
+    try { updateUrgentStat(); }    catch(e) { console.error('[updateAllStats] updateUrgentStat エラー:', e); }
+    try { updateInquiryStat(); }   catch(e) { console.error('[updateAllStats] updateInquiryStat エラー:', e); }
+    console.log('[updateAllStats] 完了');
   }
 
   // ===== クライアント管理 =====
@@ -4181,9 +4215,12 @@
     fetchRecordsFromSheet(),
     fetchPayrollRecordsFromSheet()
   ]).then(function() {
-    renderTasks();
-    updateAllStats();
+    console.log('[初期化] Promise.all 完了 → renderTasks / updateAllStats を実行');
     console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, 給与計算記録:', loadPayrollRecords().length, '件');
+    try { renderTasks(); } catch(e) { console.error('[初期化] renderTasks でエラー:', e); }
+    try { updateAllStats(); } catch(e) { console.error('[初期化] updateAllStats でエラー:', e); }
+  }).catch(function(e) {
+    console.error('[初期化] データ取得でエラー:', e);
   });
 </script>
 <script>
