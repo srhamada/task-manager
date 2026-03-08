@@ -1453,7 +1453,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v7 (completeTodo全呼出元修正)');
+  console.log('[app] コードバージョン: 2026-03-08-v8 (formatTime UTC→JST補正)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -4143,20 +4143,28 @@
     return r + '分';
   }
 
-  // ISO時刻文字列やDate値を HH:mm 形式に変換
-  // 例: "1899-12-30T11:30:00.000Z" → "11:30", "12:00" → "12:00"
+  // 時刻値を HH:mm 形式の文字列に変換（タイムゾーン変換なし）
+  // "07:00" → "07:00", "1899-12-29T22:00:00.000Z" → "07:00"（UTC+9補正）
   function formatTime(val) {
     if (!val) return '';
     var s = String(val);
     // 既に HH:mm 形式ならそのまま
     if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-    // ISO文字列（1899-12-30T...Z など）→ 時:分 を抽出
+    // ISO文字列（1899-12-30T...Z など）→ UTC時刻を+9時間してJSTに変換
     var m = s.match(/T(\d{2}):(\d{2})/);
-    if (m) return m[1] + ':' + m[2];
-    // Date型が文字列化されたケース
-    var d = new Date(s);
-    if (!isNaN(d.getTime())) {
-      return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    if (m) {
+      var h = parseInt(m[1], 10) + 9; // UTC → JST
+      var min = parseInt(m[2], 10);
+      if (h >= 24) h -= 24;
+      return ('0' + h).slice(-2) + ':' + ('0' + min).slice(-2);
+    }
+    // 数値（小数）→ 時刻に変換（例: 0.291666... → 07:00）
+    var num = parseFloat(s);
+    if (!isNaN(num) && num >= 0 && num < 1) {
+      var totalMins = Math.round(num * 24 * 60);
+      var hh = Math.floor(totalMins / 60);
+      var mm = totalMins % 60;
+      return ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
     }
     return s;
   }
