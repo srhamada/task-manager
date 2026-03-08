@@ -1443,7 +1443,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v4 (クライアント・行政問い合わせ スプレッドシート連携)');
+  console.log('[app] コードバージョン: 2026-03-08-v5 (クライアント・行政問い合わせ シート連携完全版)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2747,6 +2747,10 @@
           else throw new Error('クライアントデータの形式が不正です');
         }
         console.log('[fetchClientsFromSheet] 取得件数:', rows.length);
+        // ステータスの日本語→英語変換
+        var CLIENT_STATUS_JP_TO_CODE = {
+          '見込み': 'prospect', '契約中': 'active', '契約終了': 'terminated'
+        };
         clientsCache = rows.map(function(row) {
           var c = {};
           Object.keys(CLIENT_SHEET_TO_PROP).forEach(function(sheetKey) {
@@ -2754,6 +2758,9 @@
           });
           c.id = parseInt(c.id, 10) || 0;
           c.employees = parseInt(c.employees, 10) || 0;
+          // ステータス正規化（日本語→英語コード）
+          if (CLIENT_STATUS_JP_TO_CODE[c.status]) c.status = CLIENT_STATUS_JP_TO_CODE[c.status];
+          if (!c.status) c.status = 'active';
           if (!c.contact) c.contact = '';
           if (!c.memo) c.memo = '';
           return c;
@@ -2761,6 +2768,9 @@
           // 有効フラグがFALSEのものは除外
           return c.active !== 'FALSE' && c.active !== false;
         });
+        if (clientsCache.length > 0) {
+          console.log('[fetchClientsFromSheet] 正規化後1件目:', JSON.stringify(clientsCache[0]));
+        }
         // localStorageにもキャッシュ（オフライン対応）
         saveClients(clientsCache);
         return clientsCache;
@@ -2773,7 +2783,9 @@
   }
 
   // クライアントをスプレッドシートに新規登録
+  var CLIENT_STATUS_CODE_TO_JP = { 'prospect': '見込み', 'active': '契約中', 'terminated': '契約終了' };
   function saveClientToSheet(clientData) {
+    var statusJp = CLIENT_STATUS_CODE_TO_JP[clientData.status] || clientData.status || '契約中';
     var postData = {
       sheet: 'クライアント',
       '会社名':           clientData.name || '',
@@ -2782,7 +2794,7 @@
       '担当者':           clientData.manager || '',
       '連絡先':           clientData.contact || '',
       '契約開始日':       clientData.contractStart || '',
-      'ステータス':       clientData.status || 'active',
+      'ステータス':       statusJp,
       '給与計算':         clientData.payroll || '',
       '締め日':           clientData.payrollCloseDay || '',
       '支払日':           clientData.payrollPayDay || '',
@@ -2829,6 +2841,11 @@
           else throw new Error('行政問い合わせデータの形式が不正です');
         }
         console.log('[fetchInquiriesFromSheet] 取得件数:', rows.length);
+        // ステータスの日本語→英語変換
+        var INQ_STATUS_JP = {
+          '対応中': 'inprogress', '回答済': 'replied', '回答済み': 'replied',
+          '確認待ち': 'waiting', '完了': 'done'
+        };
         inquiriesCache = rows.map(function(row) {
           var r = {};
           Object.keys(INQUIRY_SHEET_TO_PROP).forEach(function(sheetKey) {
@@ -2837,10 +2854,16 @@
           r.id = parseInt(r.id, 10) || 0;
           r.due = normalizeDate(r.due);
           r.date = normalizeDate(r.date);
+          // ステータス正規化
+          if (INQ_STATUS_JP[r.status]) r.status = INQ_STATUS_JP[r.status];
+          if (!r.status) r.status = 'inprogress';
           return r;
         }).filter(function(r) {
           return r.active !== 'FALSE' && r.active !== false;
         });
+        if (inquiriesCache.length > 0) {
+          console.log('[fetchInquiriesFromSheet] 正規化後1件目:', JSON.stringify(inquiriesCache[0]));
+        }
         // localStorageにもキャッシュ
         saveInquiries(inquiriesCache);
         return inquiriesCache;
@@ -2852,7 +2875,9 @@
   }
 
   // 行政問い合わせをスプレッドシートに新規登録
+  var INQ_STATUS_CODE_TO_JP = { 'inprogress': '対応中', 'replied': '回答済', 'waiting': '確認待ち', 'done': '完了' };
   function saveInquiryToSheet(entry) {
+    var statusJp = INQ_STATUS_CODE_TO_JP[entry.status] || entry.status || '対応中';
     var postData = {
       sheet: '行政問い合わせ記録',
       '日付':       entry.date || '',
@@ -2862,7 +2887,7 @@
       '連絡先':     entry.contact || '',
       '内容':       entry.content || '',
       '回答':       entry.reply || '',
-      'ステータス': entry.status || 'inprogress',
+      'ステータス': statusJp,
       '期限':       entry.due || '',
       'メモ':       entry.memo || ''
     };
@@ -2924,14 +2949,15 @@
   ];
 
   function loadClients() {
+    // スプレッドシートキャッシュがあればそちらを優先
+    if (clientsCache.length > 0) return clientsCache.slice();
+    // フォールバック: localStorage
     var raw = localStorage.getItem(CLIENT_STORAGE_KEY);
     if (raw === null) {
-      saveClients(SAMPLE_CLIENTS);
       return JSON.parse(JSON.stringify(SAMPLE_CLIENTS));
     }
     try {
       var clients = JSON.parse(raw);
-      // マイグレーション：旧ステータス値を新しい値に変換
       clients = clients.map(function(c) {
         if (c.status === 'new')      c.status = 'prospect';
         if (c.status === 'inactive') c.status = 'terminated';
@@ -2949,9 +2975,12 @@
 
   function updateClientStat() {
     var clients = loadClients();
-    var count   = clients.filter(function(c) { return c.status === 'active'; }).length;
+    var count   = clients.filter(function(c) {
+      return c.status === 'active' || c.status === '契約中';
+    }).length;
     var el = document.getElementById('stat-client-count');
     if (el) el.textContent = count + '社';
+    console.log('[updateClientStat] 契約中:', count, '社 / 全', clients.length, '社');
   }
 
   // 「契約中」クライアントのみでプルダウンを再構築（複数セレクト対応）
@@ -3289,6 +3318,9 @@
   };
 
   function loadInquiries() {
+    // スプレッドシートキャッシュがあればそちらを優先
+    if (inquiriesCache.length > 0) return inquiriesCache.slice();
+    // フォールバック: localStorage
     try { return JSON.parse(localStorage.getItem(INQUIRY_KEY) || '[]'); }
     catch(e) { return []; }
   }
@@ -3300,12 +3332,21 @@
   function updateInquiryStat() {
     var now = new Date();
     var ym  = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    var all  = loadInquiries().filter(function(r) { return (r.date || '').slice(0, 7) === ym; });
-    var done = all.filter(function(r) { return r.status === 'done' || r.status === 'replied'; });
+    var allInquiries = loadInquiries();
+    // 日付が正規化済み(yyyy-mm-dd)またはISO文字列のどちらでも今月判定できるようにする
+    var thisMonth = allInquiries.filter(function(r) {
+      var dateStr = normalizeDate(r.date) || '';
+      return dateStr.slice(0, 7) === ym;
+    });
+    var done = thisMonth.filter(function(r) {
+      var st = r.status || '';
+      return st === 'done' || st === 'replied' || st === '完了' || st === '回答済';
+    });
     var cEl  = document.getElementById('stat-inquiry-count');
     var dEl  = document.getElementById('stat-inquiry-done');
-    if (cEl) cEl.textContent = all.length + '件';
+    if (cEl) cEl.textContent = thisMonth.length + '件';
     if (dEl) dEl.textContent = '今月対応済み ' + done.length + '件';
+    console.log('[updateInquiryStat] 今月:', thisMonth.length, '件, 対応済み:', done.length, '件');
   }
 
   function initInquiryPage() {
