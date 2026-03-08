@@ -2809,9 +2809,14 @@
     })
     .then(function(res) { return res.json(); })
     .then(function(result) {
+      if (Array.isArray(result)) throw new Error('POSTがGETに変換されました。GASウェブアプリの再デプロイが必要です。');
       if (result && result.error) throw new Error(result.error);
-      console.log('[saveClientToSheet] 保存成功');
+      console.log('✅ [saveClientToSheet] 保存成功: ' + (clientData.name || '(名前なし)'));
       return result;
+    })
+    .catch(function(e) {
+      console.error('❌ [saveClientToSheet] 保存失敗: ' + e.message);
+      throw e;
     });
   }
 
@@ -2898,9 +2903,14 @@
     })
     .then(function(res) { return res.json(); })
     .then(function(result) {
+      if (Array.isArray(result)) throw new Error('POSTがGETに変換されました。GASウェブアプリの再デプロイが必要です。');
       if (result && result.error) throw new Error(result.error);
-      console.log('[saveInquiryToSheet] 保存成功');
+      console.log('✅ [saveInquiryToSheet] 保存成功: ' + (entry.org || '(機関なし)') + (entry.client ? ' / ' + entry.client : ''));
       return result;
+    })
+    .catch(function(e) {
+      console.error('❌ [saveInquiryToSheet] 保存失敗: ' + e.message);
+      throw e;
     });
   }
 
