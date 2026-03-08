@@ -3086,13 +3086,16 @@
       if (c.id === id) c.status = 'terminated';
       return c;
     });
+    clientsCache = clients;
     saveClients(clients);
     renderClients();
   }
 
   function deleteClient(id) {
     if (!confirm('このクライアントを完全に削除しますか？\nこの操作は取り消せません。\n\n通常は「契約終了」への変更をお勧めします。')) return;
-    saveClients(loadClients().filter(function(c) { return c.id !== id; }));
+    var remaining = loadClients().filter(function(c) { return c.id !== id; });
+    clientsCache = remaining;
+    saveClients(remaining);
     renderClients();
   }
 
@@ -3180,6 +3183,7 @@
         if (c.id !== editId) return c;
         return Object.assign({}, c, newData);
       });
+      clientsCache = clients;
       saveClients(clients);
       closeClientModal();
       closeClientDetail();
@@ -3469,6 +3473,7 @@
     if (editId) {
       // 編集（localStorageのみ更新 — 編集のスプレッドシート対応は次段階）
       records = records.map(function(r) { return r.id === entry.id ? entry : r; });
+      inquiriesCache = records;
       saveInquiries(records);
       updateInquiryStat();
       addActivity('inquiry_updated', actText(entry.client, (entry.org || '行政機関') + ' への問い合わせ記録', 'を更新'));
@@ -3528,7 +3533,9 @@
 
   function deleteInquiry(id) {
     if (!confirm('この問い合わせ記録を削除しますか？')) return;
-    saveInquiries(loadInquiries().filter(function(r) { return r.id !== id; }));
+    var remaining = loadInquiries().filter(function(r) { return r.id !== id; });
+    inquiriesCache = remaining;
+    saveInquiries(remaining);
     updateInquiryStat();
     renderInquiryList();
   }
