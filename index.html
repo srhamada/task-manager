@@ -1443,6 +1443,7 @@
 </main>
 
 <script>
+  console.log('[app] コードバージョン: 2026-03-08-v2 (updateAllStats修正済み)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1652,11 +1653,12 @@
   }
 
   // スプレッドシートの列名 → 内部プロパティ名のマッピング
+  // 注意: スプレッドシートの11列目（記録済に相当）はヘッダーが空文字('')
   var SHEET_TO_PROP = {
     'ID': 'id', 'クライアント': 'client', '業務種別': 'category',
     'タスク内容': 'text', '期限': 'due', '担当者': 'assignee',
     '状態': 'status', '優先度': 'priority', '作成日': 'createdAt', '更新日': 'updatedAt',
-    '記録済': 'recorded',
+    '記録済': 'recorded', '': 'recorded',
     '開始時刻': 'workStart', '終了時刻': 'workEnd', '作業時間': 'workMinutes'
   };
 
