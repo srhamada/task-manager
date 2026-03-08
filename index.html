@@ -1443,7 +1443,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v2 (updateAllStats修正済み)');
+  console.log('[app] コードバージョン: 2026-03-08-v3 (fetchTasksFromSheet内で即時updateAllStats)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1716,10 +1716,14 @@
           if (!t.text && t.category) t.text = t.category;
           return t;
         });
+        console.log('[fetchTasksFromSheet] 正規化後1件目:', tasksCache.length > 0 ? JSON.stringify(tasksCache[0]) : '(なし)');
+        // タスク取得完了時点でTODO描画とカード統計を即座に更新
+        try { renderTasks(); } catch(e) { console.error('[fetchTasksFromSheet] renderTasks エラー:', e); }
+        try { updateAllStats(); } catch(e) { console.error('[fetchTasksFromSheet] updateAllStats エラー:', e); }
         return tasksCache;
       })
       .catch(function(e) {
-        alert('タスクの読み込みに失敗しました: ' + e.message);
+        console.error('[fetchTasksFromSheet] 失敗:', e);
         return [];
       });
   }
@@ -4212,15 +4216,18 @@
     if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
   })();
   // スプレッドシートからタスク・記録・給与計算記録を取得して初期表示
+  // ※ タスクの描画とカード統計はfetchTasksFromSheet内で即座に実行される
+  // ※ Promise.allは記録系取得完了後の追加描画用
   Promise.all([
     fetchTasksFromSheet(),
     fetchRecordsFromSheet(),
     fetchPayrollRecordsFromSheet()
   ]).then(function() {
-    console.log('[初期化] Promise.all 完了 → renderTasks / updateAllStats を実行');
+    console.log('[初期化] Promise.all 完了（全シート取得済み）');
     console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, 給与計算記録:', loadPayrollRecords().length, '件');
-    try { renderTasks(); } catch(e) { console.error('[初期化] renderTasks でエラー:', e); }
-    try { updateAllStats(); } catch(e) { console.error('[初期化] updateAllStats でエラー:', e); }
+    // 記録系データが揃った後に完了一覧・給与記録を描画
+    try { renderDoneList(); } catch(e) { console.error('[初期化] renderDoneList エラー:', e); }
+    try { renderPayrollRecord(); } catch(e) { console.error('[初期化] renderPayrollRecord エラー:', e); }
   }).catch(function(e) {
     console.error('[初期化] データ取得でエラー:', e);
   });
