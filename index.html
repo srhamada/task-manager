@@ -191,20 +191,18 @@
       margin-top: 5px;
       flex-shrink: 0;
     }
-    .dot-client  { background: #4caf50; }   /* 緑：クライアント */
-    .dot-todo    { background: #1976d2; }   /* 青：TODO */
-    .dot-record  { background: #26c6da; }   /* 水色：記録追加 */
-    .dot-payroll { background: #ef6c00; }   /* オレンジ：給与計算 */
-    .dot-consult { background: #7e57c2; }   /* 紫：相談記録 */
-    .dot-inquiry { background: #f9a825; }   /* 黄：行政問合せ */
-    .dot-done    { background: #90a4ae; }   /* グレー：完了移動 */
-    /* 後方互換 */
-    .dot-purple { background: #4caf50; }
-    .dot-blue   { background: #26a69a; }
-    .dot-green  { background: #fbc02d; }
-    .dot-pink   { background: #78909c; }
     .activity-text { color: #263326; flex: 1; }
     .activity-time { color: #9e9e9e; font-size: 0.77rem; white-space: nowrap; }
+    .act-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-right: 5px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
 
     /* ===== クライアント一覧 ===== */
     .search-bar { display: flex; gap: 12px; margin-bottom: 20px; }
@@ -1449,7 +1447,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v9 (時間集計統合ビュー)');
+  console.log('[app] コードバージョン: 2026-03-08-v10 (アクティビティ色分け改善)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1544,6 +1542,46 @@
     return (ts.getMonth() + 1) + '/' + ts.getDate();
   }
 
+  // アクティビティの操作種別を判定
+  function detectActOperation(a) {
+    var t = a.type || '';
+    var txt = a.text || '';
+    if (txt.indexOf('完了') !== -1 || t === 'done') return 'complete';
+    if (txt.indexOf('追加') !== -1 || txt.indexOf('登録') !== -1 || t.indexOf('created') !== -1) return 'add';
+    if (txt.indexOf('更新') !== -1 || t.indexOf('updated') !== -1 || t.indexOf('changed') !== -1) return 'update';
+    if (txt.indexOf('削除') !== -1 || t.indexOf('deleted') !== -1) return 'delete';
+    return 'other';
+  }
+
+  // アクティビティの業務種別を判定
+  function detectActCategory(a) {
+    var t = a.type || '';
+    var txt = a.text || '';
+    if (t.indexOf('inquiry') !== -1 || txt.indexOf('問い合わせ') !== -1) return 'inquiry';
+    if (t.indexOf('consultation') !== -1 || txt.indexOf('相談') !== -1) return 'consult';
+    if (t === 'client' || txt.indexOf('クライアント') !== -1) return 'client';
+    if (t === 'payroll' || PAYROLL_CATEGORIES.some(function(c) { return txt.indexOf(c) !== -1; })) return 'payroll';
+    return 'procedure';
+  }
+
+  // 操作種別の表示定義
+  var OP_STYLE = {
+    add:      { label: '追加', bg: '#e3f2fd', color: '#1565c0', dot: '#1976d2' },
+    update:   { label: '更新', bg: '#fff8e1', color: '#f57f17', dot: '#ffa000' },
+    complete: { label: '完了', bg: '#e8f5e9', color: '#2e7d32', dot: '#4caf50' },
+    delete:   { label: '削除', bg: '#fafafa', color: '#9e9e9e', dot: '#90a4ae' },
+    other:    { label: '',     bg: '#f5f5f5', color: '#757575', dot: '#bdbdbd' }
+  };
+
+  // 業務種別の表示定義
+  var CAT_STYLE = {
+    payroll:   { label: '給与計算',     bg: '#fff3e0', color: '#e65100', border: '#ffcc80' },
+    procedure: { label: '手続き',       bg: '#f1f8e9', color: '#33691e', border: '#c5e1a5' },
+    inquiry:   { label: '行政問合せ',   bg: '#fffde7', color: '#f57f17', border: '#fff59d' },
+    consult:   { label: '相談',         bg: '#f3e5f5', color: '#6a1b9a', border: '#ce93d8' },
+    client:    { label: 'クライアント', bg: '#e8f5e9', color: '#2e7d32', border: '#a5d6a7' }
+  };
+
   function renderActivityList() {
     var list = document.getElementById('activity-list');
     if (!list) return;
@@ -1553,12 +1591,24 @@
       return;
     }
     list.innerHTML = acts.map(function(a) {
-      // ACT_META に actionType が直接あればそれを使い、なければ青にフォールバック
-      var meta = ACT_META[a.type] || { color: '#1976d2' };
-      var dotColor = meta.color;
+      var op  = detectActOperation(a);
+      var cat = detectActCategory(a);
+      var os  = OP_STYLE[op]  || OP_STYLE.other;
+      var cs  = CAT_STYLE[cat] || {};
+
+      var badges = '';
+      // 操作バッジ
+      if (os.label) {
+        badges += '<span class="act-badge" style="background:' + os.bg + ';color:' + os.color + ';">' + os.label + '</span>';
+      }
+      // 業務バッジ
+      if (cs.label) {
+        badges += '<span class="act-badge" style="background:' + cs.bg + ';color:' + cs.color + ';border:1px solid ' + cs.border + ';">' + cs.label + '</span>';
+      }
+
       return '<li class="activity-item">' +
-        '<span class="activity-dot" style="background:' + dotColor + ';width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px;display:inline-block;"></span>' +
-        '<span class="activity-text">' + esc(a.text) + '</span>' +
+        '<span class="activity-dot" style="background:' + os.dot + ';"></span>' +
+        '<span class="activity-text">' + badges + esc(a.text) + '</span>' +
         '<span class="activity-time">' + formatActivityTime(a.ts) + '</span>' +
         '</li>';
     }).join('');
@@ -2638,7 +2688,7 @@
 
   // ===== 手続き件数 集計 =====
 
-  // 共通集計ヘルパー：指定カテゴリで今月の件数・完了数を返す
+  // 共通集計ヘルパー：指定カテゴリで「期限が今月」の件数・完了数を返す
   function countThisMonth(categories) {
     var now   = new Date();
     var year  = now.getFullYear();
@@ -2650,14 +2700,16 @@
       // カテゴリ未設定の旧データ：テキストで代用
       if (!match && !cat) match = categories.indexOf(t.text || '') !== -1;
       if (!match) return;
-      // 記録日 → 期限日 の順で今月判定
-      var dateStr = t.recordDate || t.due || '';
+      // 期限が今月のもののみカウント（期限が空欄・不正な日付は除外）
+      var dateStr = t.due || '';
       if (!dateStr) return;
       var d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return;
       if (d.getFullYear() !== year || d.getMonth() !== month) return;
       total++;
       if (t.status === 'done') done++;
     });
+    console.log('[countThisMonth] カテゴリ=' + categories[0] + '... → 今月件数=' + total + ', 完了=' + done);
     return { total: total, done: done };
   }
 
