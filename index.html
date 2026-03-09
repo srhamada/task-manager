@@ -246,6 +246,39 @@
       font-size: 0.75rem;
       font-weight: 600;
     }
+    /* 算定年更カード（付箋風） */
+    .busy-season-card {
+      background: linear-gradient(135deg, #fffde7 0%, #fff9c4 100%);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      border-left: 4px solid #fdd835;
+      max-width: 340px;
+      margin-left: auto;
+    }
+    .busy-season-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+    }
+    .busy-season-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #5d4037;
+      margin-bottom: 6px;
+    }
+    .busy-season-body {
+      font-size: 0.88rem;
+      color: #6d4c41;
+      margin-bottom: 4px;
+    }
+    .busy-season-sub {
+      font-size: 0.75rem;
+      color: #a1887f;
+    }
+
     .status-active     { background: #e8f5e9; color: #2e7d32; }
     .status-prospect   { background: #e3f2fd; color: #1565c0; }
     .status-inprogress { background: #fff3e0; color: #e65100; }
@@ -486,6 +519,10 @@
       <span class="nav-icon">💴</span>
       <span class="nav-label">給与計算ガイド</span>
     </div>
+    <div class="nav-item" onclick="showPage('busy-season', this)">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">算定年更管理</span>
+    </div>
   </nav>
 </aside>
 
@@ -525,6 +562,13 @@
         <div class="stat-value" id="stat-inquiry-count">—</div>
         <div class="stat-sub" id="stat-inquiry-done">集計中…</div>
       </div>
+    </div>
+
+    <!-- 算定年更カード（付箋風） -->
+    <div onclick="showPageByName('busy-season')" class="busy-season-card">
+      <div class="busy-season-title">📊 算定年更管理</div>
+      <div class="busy-season-body">今年の算定年更はこちら☆</div>
+      <div class="busy-season-sub">繁忙期の進捗をまとめて確認</div>
     </div>
 
     <div style="display:grid;grid-template-columns:3fr 2fr;gap:20px;margin-bottom:24px;">
@@ -1459,6 +1503,18 @@
           <button class="btn btn-secondary" onclick="closeTodoDetailModal()">閉じる</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- 算定年更管理（仮ページ） -->
+  <div class="page" id="page-busy-season">
+    <div class="page-header">
+      <h1>算定年更管理</h1>
+    </div>
+    <div class="card" style="text-align:center;padding:60px 20px;">
+      <div style="font-size:2.5rem;margin-bottom:16px;">📊</div>
+      <div style="font-size:1.1rem;font-weight:600;color:#1a3320;margin-bottom:8px;">このページは準備中です</div>
+      <div style="font-size:0.88rem;color:#9e9e9e;">算定基礎届・年度更新の進捗管理機能を実装予定です。</div>
     </div>
   </div>
 
