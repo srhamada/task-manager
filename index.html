@@ -4663,7 +4663,7 @@
         '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="顧問先名" value="' + esc(row['顧問先名'] || '') + '" onchange="updateBsCell(this)" /></td>' +
         stepCells +
         '<td class="bs-comment-cell"><input data-idx="' + idx + '" data-col="コメント" value="' + esc(row['コメント'] || '') + '" onchange="updateBsCell(this)" /></td>' +
-        '<td style="font-size:0.75rem;color:#9e9e9e;">' + esc((row['更新日'] || '').slice(0, 10)) + '</td>' +
+        '<td style="font-size:0.75rem;color:#9e9e9e;">' + esc((row['更新日'] || '').slice(0, 16)) + '</td>' +
         '</tr>';
     }).join('');
   }
