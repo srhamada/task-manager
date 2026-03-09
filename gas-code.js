@@ -104,9 +104,19 @@ function doPost(e) {
       Logger.log('[doPost] 行政問い合わせ新規追加: inquiry_id=' + data['inquiry_id']);
     }
 
+    // 相談記録シートのデバッグログ
+    if (sheetName === SHEET_CONSULT) {
+      Logger.log('[doPost] 相談記録ヘッダー: ' + JSON.stringify(headers));
+      Logger.log('[doPost] 相談記録 要対応フラグ値: ' + data['要対応フラグ'] + ' / ' + data['要対応フラグ（TRUE / FALSE）']);
+    }
+
     var row = headers.map(function(h) {
       return data[h] !== undefined ? data[h] : '';
     });
+
+    if (sheetName === SHEET_CONSULT) {
+      Logger.log('[doPost] 相談記録 appendRow: ' + JSON.stringify(row));
+    }
 
     sheet.appendRow(row);
     Logger.log('[doPost] 新規追加: シート=' + sheetName);

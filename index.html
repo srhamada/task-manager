@@ -3857,7 +3857,8 @@
         '開始時刻':     workStart,
         '終了時刻':     workEnd,
         '作業時間（分）': workMinutes,
-        '要対応フラグ': entry.todoFlag ? 'TRUE' : 'FALSE'
+        '要対応フラグ': entry.todoFlag ? 'TRUE' : 'FALSE',
+        '要対応フラグ（TRUE / FALSE）': entry.todoFlag ? 'TRUE' : 'FALSE'
       };
       console.log('[saveConsultation] スプレッドシート送信:', JSON.stringify(sheetData));
       fetch(GAS_URL, {
