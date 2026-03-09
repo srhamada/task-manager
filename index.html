@@ -1540,6 +1540,7 @@
         <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="loadActiveClientsIntoBusySeason()">契約クライアント読込</button>
         <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="addBusySeasonRow()">＋ 行追加</button>
         <button class="btn btn-primary" id="bs-save-btn" style="font-size:0.82rem;" onclick="saveBusySeasonRecords()">保存</button>
+        <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="exportBusySeasonCSV()">CSV出力</button>
         <span id="bs-save-msg" style="display:none;font-size:0.82rem;color:#2e7d32;font-weight:600;">保存しました</span>
         <span id="bs-save-error" style="display:none;font-size:0.82rem;color:#c62828;font-weight:600;"></span>
       </div>
@@ -4764,6 +4765,26 @@
     .finally(function() {
       if (btn) { btn.disabled = false; btn.textContent = '保存'; }
     });
+  }
+
+  function exportBusySeasonCSV() {
+    if (busySeasonRows.length === 0) { alert('出力するデータがありません。'); return; }
+    var year = (document.getElementById('bs-year') || {}).value || '';
+    var csvRows = [BS_HEADERS].concat(busySeasonRows.map(function(row) {
+      return BS_HEADERS.map(function(h) {
+        var v = String(row[h] || '');
+        if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
+          return '"' + v.replace(/"/g, '""') + '"';
+        }
+        return v;
+      });
+    }));
+    var csvText = '\uFEFF' + csvRows.map(function(r) { return r.join(','); }).join('\r\n');
+    var blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '算定年更管理_' + year + '.csv';
+    a.click();
   }
 
   // ===== 作業時間ヘルパー =====
