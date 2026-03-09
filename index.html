@@ -249,34 +249,28 @@
     /* 算定年更カード（付箋風） */
     .busy-season-card {
       background: linear-gradient(135deg, #fffde7 0%, #fff9c4 100%);
-      border-radius: 12px;
-      padding: 16px 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      border-radius: 10px;
+      padding: 10px 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.07);
       cursor: pointer;
       transition: transform 0.15s, box-shadow 0.15s;
-      border-left: 4px solid #fdd835;
-      max-width: 340px;
-      margin-left: auto;
+      border-left: 3px solid #fdd835;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
     .busy-season-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.11);
     }
     .busy-season-title {
-      font-size: 0.95rem;
+      font-size: 0.82rem;
       font-weight: 700;
       color: #5d4037;
-      margin-bottom: 6px;
+      margin-bottom: 3px;
     }
     .busy-season-body {
-      font-size: 0.88rem;
+      font-size: 0.78rem;
       color: #6d4c41;
-      margin-bottom: 4px;
-    }
-    .busy-season-sub {
-      font-size: 0.75rem;
-      color: #a1887f;
     }
 
     .status-active     { background: #e8f5e9; color: #2e7d32; }
@@ -531,9 +525,16 @@
 
   <!-- ダッシュボード -->
   <div class="page active" id="page-dashboard">
-    <div class="page-header">
-      <h1>ダッシュボード</h1>
-      <p id="todayGreeting"></p>
+    <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+      <div>
+        <h1>ダッシュボード</h1>
+        <p id="todayGreeting"></p>
+      </div>
+      <!-- 算定年更カード（付箋風・右上配置） -->
+      <div onclick="showPageByName('busy-season')" class="busy-season-card">
+        <div class="busy-season-title">📊 算定年更管理</div>
+        <div class="busy-season-body">今年の算定年更はこちら☆</div>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;margin-bottom:24px;">
@@ -562,13 +563,6 @@
         <div class="stat-value" id="stat-inquiry-count">—</div>
         <div class="stat-sub" id="stat-inquiry-done">集計中…</div>
       </div>
-    </div>
-
-    <!-- 算定年更カード（付箋風） -->
-    <div onclick="showPageByName('busy-season')" class="busy-season-card">
-      <div class="busy-season-title">📊 算定年更管理</div>
-      <div class="busy-season-body">今年の算定年更はこちら☆</div>
-      <div class="busy-season-sub">繁忙期の進捗をまとめて確認</div>
     </div>
 
     <div style="display:grid;grid-template-columns:3fr 2fr;gap:20px;margin-bottom:24px;">
