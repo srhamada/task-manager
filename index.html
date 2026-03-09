@@ -3872,6 +3872,8 @@
           console.error('[saveConsultation] スプレッドシート保存失敗:', result.error);
         } else {
           console.log('[saveConsultation] ✅ スプレッドシート保存成功');
+          console.log('[saveConsultation] 要対応フラグ保存値: ' + (result.todoFlag || '(不明)'));
+          console.log('[saveConsultation] シートヘッダー: ' + JSON.stringify(result.headers || []));
         }
       })
       .catch(function(e) {

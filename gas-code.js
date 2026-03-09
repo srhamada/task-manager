@@ -104,7 +104,7 @@ function doPost(e) {
       Logger.log('[doPost] 行政問い合わせ新規追加: inquiry_id=' + data['inquiry_id']);
     }
 
-    // 相談記録シートのデバッグログ
+    // 相談記録シートのデバッグログ＆O列保証
     if (sheetName === SHEET_CONSULT) {
       Logger.log('[doPost] 相談記録ヘッダー: ' + JSON.stringify(headers));
       Logger.log('[doPost] 相談記録 要対応フラグ値: ' + data['要対応フラグ'] + ' / ' + data['要対応フラグ（TRUE / FALSE）']);
@@ -114,13 +114,22 @@ function doPost(e) {
       return data[h] !== undefined ? data[h] : '';
     });
 
+    // 相談記録: O列(15番目)に要対応フラグを確実にセット
     if (sheetName === SHEET_CONSULT) {
-      Logger.log('[doPost] 相談記録 appendRow: ' + JSON.stringify(row));
+      var todoFlagVal = data['要対応フラグ'] || data['要対応フラグ（TRUE / FALSE）'] || 'FALSE';
+      // 配列が15未満の場合は拡張
+      while (row.length < 15) row.push('');
+      row[14] = todoFlagVal;  // O列 = index 14
+      Logger.log('[doPost] 相談記録 appendRow (O列強制セット): ' + JSON.stringify(row));
     }
 
     sheet.appendRow(row);
     Logger.log('[doPost] 新規追加: シート=' + sheetName);
 
+    // 相談記録の場合はO列の保存値をレスポンスに含める
+    if (sheetName === SHEET_CONSULT) {
+      return jsonResponse_({ success: true, todoFlag: row[14], headers: headers });
+    }
     return jsonResponse_({ success: true });
 
   } catch (err) {
