@@ -1289,6 +1289,21 @@
           <label class="form-label">次回対応期限（任意）</label>
           <input id="consult-due" class="form-input" type="date" />
         </div>
+        <div class="form-group">
+          <label class="form-label">開始時刻</label>
+          <input id="consult-work-start" class="form-input" type="time" oninput="calcConsultWorkMinutes()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">終了時刻</label>
+          <input id="consult-work-end" class="form-input" type="time" oninput="calcConsultWorkMinutes()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">作業時間（分）</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input id="consult-work-minutes" class="form-input" type="number" min="0" step="5" readonly style="width:80px;background:#f5f5f5;" />
+            <span id="consult-work-display" style="font-size:0.85rem;color:#5a7a5e;"></span>
+          </div>
+        </div>
         <div class="form-group full">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
             <input type="checkbox" id="consult-todo-flag" style="width:16px;height:16px;" />
@@ -1437,7 +1452,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-08-v12 (アクティビティ●色デバッグ)');
+  console.log('[app] コードバージョン: 2026-03-09-v13 (相談記録スプレッドシート保存)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -3706,7 +3721,7 @@
     document.getElementById('consult-form-title').textContent = '新規相談記録';
     var todoFlag = document.getElementById('consult-todo-flag');
     if (todoFlag) todoFlag.checked = false;
-    ['consult-contact','consult-content','consult-reply','consult-memo','consult-due'].forEach(function(id) {
+    ['consult-contact','consult-content','consult-reply','consult-memo','consult-due','consult-work-start','consult-work-end','consult-work-minutes'].forEach(function(id) {
       var el = document.getElementById(id); if (el) el.value = '';
     });
     var sel = document.getElementById('consult-client');    if (sel) sel.value = '';
@@ -3716,8 +3731,24 @@
     document.getElementById('consult-tool').value     = '';
     document.getElementById('consult-category').value = '';
     document.getElementById('consult-status').value   = 'inprogress';
+    var dispEl = document.getElementById('consult-work-display');
+    if (dispEl) dispEl.textContent = '';
     var msg = document.getElementById('consult-save-msg');
     if (msg) msg.style.display = 'none';
+  }
+
+  function calcConsultWorkMinutes() {
+    var s = (document.getElementById('consult-work-start') || {}).value;
+    var e = (document.getElementById('consult-work-end')   || {}).value;
+    var minEl = document.getElementById('consult-work-minutes');
+    var dispEl = document.getElementById('consult-work-display');
+    if (!s || !e) { if (minEl) minEl.value = ''; if (dispEl) dispEl.textContent = ''; return; }
+    var sm = parseInt(s.split(':')[0], 10) * 60 + parseInt(s.split(':')[1], 10);
+    var em = parseInt(e.split(':')[0], 10) * 60 + parseInt(e.split(':')[1], 10);
+    var diff = em - sm;
+    if (diff <= 0) { if (minEl) minEl.value = ''; if (dispEl) dispEl.textContent = ''; return; }
+    if (minEl) minEl.value = diff;
+    if (dispEl) dispEl.textContent = minsToLabel(diff);
   }
 
   function saveConsultation() {
@@ -3737,6 +3768,10 @@
     var editId = document.getElementById('consult-form-edit-id').value;
     var records = loadConsultations();
 
+    var workStart   = (document.getElementById('consult-work-start')   || {}).value || '';
+    var workEnd     = (document.getElementById('consult-work-end')     || {}).value || '';
+    var workMinutes = parseInt((document.getElementById('consult-work-minutes') || {}).value || '0', 10) || 0;
+
     var entry = {
       id:       editId ? parseInt(editId, 10) : (Math.max.apply(null, records.map(function(r){return r.id||0;}).concat([0])) + 1),
       client:   clientEl.value,
@@ -3750,7 +3785,10 @@
       status:   (document.getElementById('consult-status')   || {}).value || 'inprogress',
       due:      (document.getElementById('consult-due')      || {}).value || '',
       memo:     ((document.getElementById('consult-memo')    || {}).value || '').trim(),
-      todoFlag: !!(document.getElementById('consult-todo-flag') || {}).checked
+      todoFlag: !!(document.getElementById('consult-todo-flag') || {}).checked,
+      workStart:   workStart,
+      workEnd:     workEnd,
+      workMinutes: workMinutes
     };
 
     if (editId) {
@@ -3762,6 +3800,48 @@
     saveConsultations(records);
     syncConsultTodo(entry);
     addActivity(editId ? 'consultation_updated' : 'consultation_created', actText(entry.client, '相談記録', 'を' + (editId ? '更新' : '追加')));
+
+    // スプレッドシート「相談記録」シートへ保存（新規追加時のみ）
+    if (!editId) {
+      var nowJST = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      var assigneeName = ASSIGNEE_LABEL[entry.assignee] || entry.assignee || '';
+      var statusJp = CONSULT_STATUS[entry.status] ? CONSULT_STATUS[entry.status].label : entry.status;
+      var sheetData = {
+        sheet: '相談記録',
+        'ID':           String(Date.now()),
+        '登録日':       nowJST,
+        'クライアント名': entry.client,
+        '相談区分':     entry.category,
+        '相談内容':     entry.content,
+        '対応内容':     entry.reply,
+        '担当者':       assigneeName,
+        'ステータス':   statusJp,
+        '期限':         entry.due,
+        '備考':         entry.memo,
+        '更新日時':     nowJST,
+        '開始時刻':     workStart,
+        '終了時刻':     workEnd,
+        '作業時間（分）': workMinutes
+      };
+      console.log('[saveConsultation] スプレッドシート送信:', JSON.stringify(sheetData));
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(sheetData)
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(result) {
+        if (result && result.error) {
+          console.error('[saveConsultation] スプレッドシート保存失敗:', result.error);
+        } else {
+          console.log('[saveConsultation] ✅ スプレッドシート保存成功');
+        }
+      })
+      .catch(function(e) {
+        console.error('[saveConsultation] スプレッドシート保存エラー:', e);
+      });
+    }
+
     clearConsultForm();
     document.getElementById('consult-form-card').style.display = 'none';
     var msg = document.getElementById('consult-save-msg');

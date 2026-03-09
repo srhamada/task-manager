@@ -9,6 +9,7 @@ var SHEET_RECORD  = '記録';
 var SHEET_PAYROLL = '給与計算記録';
 var SHEET_CLIENT  = 'クライアント';
 var SHEET_INQUIRY = '行政問い合わせ記録';
+var SHEET_CONSULT = '相談記録';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
