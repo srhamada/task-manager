@@ -3850,6 +3850,7 @@
       '開始時刻':         workStart,
       '終了時刻':         workEnd,
       '作業時間（分）':   workMinutes,
+      '作業時間':         workMinutes,
       '要対応フラグ':     todoFlagStr,
       '要対応フラグ（TRUE / FALSE）': todoFlagStr
     };
@@ -3870,14 +3871,17 @@
     })
     .then(function(res) { return res.json(); })
     .then(function(result) {
-      if (result && result.error) {
-        console.error('[saveConsultation] ❌ スプレッドシート保存失敗:', result.error);
-        alert('スプレッドシート保存に失敗しました:\n' + result.error);
+      console.log('[saveConsultation] ★GASレスポンス:', JSON.stringify(result));
+      if (!result || result.success !== true) {
+        console.error('[saveConsultation] ❌ スプレッドシート保存失敗:', result && result.error || '不明なエラー');
+        alert('スプレッドシート保存に失敗しました:\n' + (result && result.error || '不明なエラー'));
         return;
       }
       console.log('[saveConsultation] ✅ スプレッドシート保存成功');
-      console.log('[saveConsultation] 要対応フラグ保存値: ' + (result.todoFlag || '(不明)'));
-      console.log('[saveConsultation] シートヘッダー: ' + JSON.stringify(result.headers || []));
+      console.log('[saveConsultation] 保存先シート: ' + result.sheetName);
+      console.log('[saveConsultation] 書き込み行: ' + result.writtenRow);
+      console.log('[saveConsultation] 保存データ: ' + JSON.stringify(result.savedData));
+      console.log('[saveConsultation] シートヘッダー: ' + JSON.stringify(result.headers));
 
       // GAS保存成功後にローカル更新
       if (editId) {

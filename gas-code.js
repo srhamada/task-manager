@@ -104,37 +104,51 @@ function doPost(e) {
       Logger.log('[doPost] 行政問い合わせ新規追加: inquiry_id=' + data['inquiry_id']);
     }
 
-    // 相談記録シートのデバッグログ＆O列保証
+    // 相談記録シート: ヘッダー名の揺れ吸収
     if (sheetName === SHEET_CONSULT) {
-      Logger.log('[doPost] 相談記録ヘッダー: ' + JSON.stringify(headers));
-      Logger.log('[doPost] 相談記録 要対応フラグ値: ' + data['要対応フラグ'] + ' / ' + data['要対応フラグ（TRUE / FALSE）']);
+      Logger.log('[doPost] ★相談記録 ヘッダー: ' + JSON.stringify(headers));
+      // 「作業時間（分）」→「作業時間」のマッピング
+      if (data['作業時間（分）'] !== undefined && data['作業時間'] === undefined) {
+        data['作業時間'] = data['作業時間（分）'];
+      }
+      // 「要対応フラグ（TRUE / FALSE）」→「要対応フラグ」のマッピング
+      if (data['要対応フラグ（TRUE / FALSE）'] !== undefined && data['要対応フラグ'] === undefined) {
+        data['要対応フラグ'] = data['要対応フラグ（TRUE / FALSE）'];
+      }
     }
 
     var row = headers.map(function(h) {
       return data[h] !== undefined ? data[h] : '';
     });
 
-    // 相談記録: O列(15番目)に要対応フラグを確実にセット
-    if (sheetName === SHEET_CONSULT) {
-      var todoFlagVal = data['要対応フラグ'] || data['要対応フラグ（TRUE / FALSE）'] || 'FALSE';
-      // 配列が15未満の場合は拡張
-      while (row.length < 15) row.push('');
-      row[14] = todoFlagVal;  // O列 = index 14
-      Logger.log('[doPost] 相談記録 appendRow (O列強制セット): ' + JSON.stringify(row));
-    }
+    // appendRow 実行前ログ
+    var lastRowBefore = sheet.getLastRow();
+    Logger.log('[doPost] ★appendRow実行前: シート=' + sheetName + ', 最終行=' + lastRowBefore);
+    Logger.log('[doPost] ★書き込み配列: ' + JSON.stringify(row));
 
     sheet.appendRow(row);
-    Logger.log('[doPost] 新規追加: シート=' + sheetName);
 
-    // 相談記録の場合はO列の保存値をレスポンスに含める
-    if (sheetName === SHEET_CONSULT) {
-      return jsonResponse_({ success: true, todoFlag: row[14], headers: headers });
+    // appendRow 実行後ログ
+    var lastRowAfter = sheet.getLastRow();
+    Logger.log('[doPost] ★appendRow実行後: 最終行=' + lastRowAfter);
+
+    if (lastRowAfter <= lastRowBefore) {
+      Logger.log('[doPost] ❌ appendRow後に行が増えていない');
+      return jsonResponse_({ success: false, error: 'appendRowが反映されませんでした', sheetName: sheetName });
     }
-    return jsonResponse_({ success: true });
+
+    Logger.log('[doPost] ✅ 新規追加成功: シート=' + sheetName + ', 行=' + lastRowAfter);
+    return jsonResponse_({
+      success: true,
+      sheetName: sheetName,
+      writtenRow: lastRowAfter,
+      savedData: row,
+      headers: headers
+    });
 
   } catch (err) {
-    Logger.log('[doPost] エラー: ' + err.message);
-    return jsonResponse_({ error: err.message });
+    Logger.log('[doPost] ❌ エラー: ' + err.message);
+    return jsonResponse_({ success: false, error: err.message });
   }
 }
 
