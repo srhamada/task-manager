@@ -1263,9 +1263,17 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">相談カテゴリ <span style="color:#c62828;">*</span></label>
+          <label class="form-label">相談区分 <span style="color:#c62828;">*</span></label>
           <select id="consult-category" class="form-select">
             <option value="">選択してください</option>
+            <option value="労務相談">労務相談</option>
+            <option value="社会保険">社会保険</option>
+            <option value="雇用保険">雇用保険</option>
+            <option value="給与計算">給与計算</option>
+            <option value="助成金">助成金</option>
+            <option value="労災">労災</option>
+            <option value="行政対応">行政対応</option>
+            <option value="その他">その他</option>
           </select>
         </div>
         <div class="form-group full">
@@ -1279,10 +1287,10 @@
         <div class="form-group">
           <label class="form-label">ステータス</label>
           <select id="consult-status" class="form-select">
-            <option value="inprogress">対応中</option>
-            <option value="replied">回答済</option>
-            <option value="waiting">確認待ち</option>
-            <option value="done">完了</option>
+            <option value="対応中">対応中</option>
+            <option value="確認待ち">確認待ち</option>
+            <option value="保留">保留</option>
+            <option value="完了">完了</option>
           </select>
         </div>
         <div class="form-group">
@@ -1332,10 +1340,10 @@
       </div>
       <div id="consult-tabs" class="tabs">
         <div class="tab active" onclick="setConsultFilter('all',this)">すべて</div>
-        <div class="tab" onclick="setConsultFilter('inprogress',this)">対応中</div>
-        <div class="tab" onclick="setConsultFilter('waiting',this)">確認待ち</div>
-        <div class="tab" onclick="setConsultFilter('replied',this)">回答済</div>
-        <div class="tab" onclick="setConsultFilter('done',this)">完了</div>
+        <div class="tab" onclick="setConsultFilter('対応中',this)">対応中</div>
+        <div class="tab" onclick="setConsultFilter('確認待ち',this)">確認待ち</div>
+        <div class="tab" onclick="setConsultFilter('保留',this)">保留</div>
+        <div class="tab" onclick="setConsultFilter('完了',this)">完了</div>
       </div>
       <div class="client-table-wrap">
         <table>
@@ -3607,6 +3615,11 @@
   var consultFilter = 'all';
 
   var CONSULT_STATUS = {
+    '対応中':   { cls: 'status-prospect',   label: '対応中'   },
+    '確認待ち': { cls: 'status-prospect',   label: '確認待ち' },
+    '保留':     { cls: 'status-active',     label: '保留'     },
+    '完了':     { cls: 'status-terminated', label: '完了'     },
+    // 旧コード互換
     inprogress: { cls: 'status-prospect',   label: '対応中'   },
     replied:    { cls: 'status-active',     label: '回答済'   },
     waiting:    { cls: 'status-prospect',   label: '確認待ち' },
@@ -3730,7 +3743,7 @@
     document.getElementById('consult-assignee').value = '';
     document.getElementById('consult-tool').value     = '';
     document.getElementById('consult-category').value = '';
-    document.getElementById('consult-status').value   = 'inprogress';
+    document.getElementById('consult-status').value   = '対応中';
     var dispEl = document.getElementById('consult-work-display');
     if (dispEl) dispEl.textContent = '';
     var msg = document.getElementById('consult-save-msg');
@@ -3782,7 +3795,7 @@
       category: catEl.value,
       content:  contentEl.value.trim(),
       reply:    ((document.getElementById('consult-reply')   || {}).value || '').trim(),
-      status:   (document.getElementById('consult-status')   || {}).value || 'inprogress',
+      status:   (document.getElementById('consult-status')   || {}).value || '対応中',
       due:      (document.getElementById('consult-due')      || {}).value || '',
       memo:     ((document.getElementById('consult-memo')    || {}).value || '').trim(),
       todoFlag: !!(document.getElementById('consult-todo-flag') || {}).checked,
@@ -3862,7 +3875,7 @@
     document.getElementById('consult-category').value = r.category || '';
     document.getElementById('consult-content').value  = r.content  || '';
     document.getElementById('consult-reply').value    = r.reply    || '';
-    document.getElementById('consult-status').value   = r.status   || 'inprogress';
+    document.getElementById('consult-status').value   = r.status   || '対応中';
     document.getElementById('consult-due').value      = r.due      || '';
     document.getElementById('consult-memo').value     = r.memo     || '';
     var todoFlag = document.getElementById('consult-todo-flag');
