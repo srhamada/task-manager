@@ -1236,8 +1236,8 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">相談日時 <span style="color:#c62828;">*</span></label>
-          <input id="consult-datetime" class="form-input" type="datetime-local" />
+          <label class="form-label">相談日 <span style="color:#c62828;">*</span></label>
+          <input id="consult-datetime" class="form-input" type="date" />
         </div>
         <div class="form-group">
           <label class="form-label">先方担当者名</label>
@@ -1349,7 +1349,7 @@
         <table>
           <thead>
             <tr>
-              <th>相談日時</th>
+              <th>相談日</th>
               <th>クライアント名</th>
               <th>カテゴリ</th>
               <th>相談内容（抜粋）</th>
@@ -3640,12 +3640,10 @@
     rebuildTaskClientSelect();
     // カテゴリ選択肢を TASK_TYPES と共通化
     populateCategorySelects();
-    // 相談日時を今日に初期化（空の場合）
+    // 相談日を今日に初期化（空の場合）
     var dt = document.getElementById('consult-datetime');
     if (dt && !dt.value) {
-      var now = new Date();
-      now.setSeconds(0, 0);
-      dt.value = now.toISOString().slice(0, 16);
+      dt.value = new Date().toISOString().slice(0, 10);
     }
     renderConsultList();
   }
@@ -3739,7 +3737,7 @@
     });
     var sel = document.getElementById('consult-client');    if (sel) sel.value = '';
     var dt  = document.getElementById('consult-datetime');
-    if (dt) { var n = new Date(); n.setSeconds(0,0); dt.value = n.toISOString().slice(0,16); }
+    if (dt) { dt.value = new Date().toISOString().slice(0, 10); }
     document.getElementById('consult-assignee').value = '';
     document.getElementById('consult-tool').value     = '';
     document.getElementById('consult-category').value = '';
@@ -3950,7 +3948,7 @@
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;">' +
         dRow('クライアント名', '<strong style="font-size:1rem;color:#1a3320;">' + esc(r.client || '—') + '</strong>') +
         dRow('ステータス', '<span class="status-badge ' + meta.cls + '">' + meta.label + '</span>') +
-        dRow('相談日時', esc(dtStr)) +
+        dRow('相談日', esc(dtStr)) +
         dRow('相談ツール', esc(r.tool || '—')) +
         dRow('こちらの担当者', esc(asgn)) +
         dRow('先方担当者', esc(r.contact || '—')) +
