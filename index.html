@@ -904,6 +904,7 @@
               <option value="">すべて</option>
               <option value="記録">記録</option>
               <option value="給与計算記録">給与計算記録</option>
+              <option value="相談記録">相談記録</option>
             </select>
           </div>
         </div>
@@ -4453,8 +4454,23 @@
       };
     });
 
+    // 相談記録のデータを統合フォーマットに変換
+    var consult = loadConsultations().map(function(t) {
+      return {
+        recordDate:  t.datetime     || '',
+        client:      t.client       || '',
+        category:    '相談記録',
+        text:        t.category     || '',
+        assignee:    t.assignee     || '',
+        workStart:   t.workStart    || '',
+        workEnd:     t.workEnd      || '',
+        workMinutes: parseInt(t.workMinutes, 10) || 0,
+        source:      '相談記録'
+      };
+    });
+
     // 結合してフィルタ
-    return records.concat(payroll).filter(function(t) {
+    return records.concat(payroll).concat(consult).filter(function(t) {
       if (!t.workMinutes || t.workMinutes <= 0) return false;
       if (month    && (t.recordDate || '').slice(0, 7) !== month) return false;
       if (client   && t.client !== client)                        return false;
@@ -4514,6 +4530,8 @@
       var timeRange = formatWorkTimeRange(t.workStart, t.workEnd, t.workMinutes);
       var srcLabel = t.source === '給与計算記録'
         ? '<span style="font-size:0.75rem;background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:4px;">給与計算</span>'
+        : t.source === '相談記録'
+        ? '<span style="font-size:0.75rem;background:#ede7f6;color:#4527a0;padding:1px 6px;border-radius:4px;">相談記録</span>'
         : '<span style="font-size:0.75rem;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:4px;">記録</span>';
       return '<tr>' +
         '<td>' + esc(t.recordDate || '—') + '</td>' +
