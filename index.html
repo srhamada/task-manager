@@ -3781,7 +3781,14 @@
 
     var workStart   = (document.getElementById('consult-work-start')   || {}).value || '';
     var workEnd     = (document.getElementById('consult-work-end')     || {}).value || '';
-    var workMinutes = parseInt((document.getElementById('consult-work-minutes') || {}).value || '0', 10) || 0;
+    // 作業時間を開始・終了から直接計算（分単位）
+    var workMinutes = '';
+    if (workStart && workEnd) {
+      var s = new Date('1970-01-01T' + workStart);
+      var e = new Date('1970-01-01T' + workEnd);
+      var diff = Math.round((e - s) / 60000);
+      if (diff > 0) workMinutes = diff;
+    }
 
     var entry = {
       id:       editId ? parseInt(editId, 10) : (Math.max.apply(null, records.map(function(r){return r.id||0;}).concat([0])) + 1),
