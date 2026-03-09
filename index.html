@@ -3826,66 +3826,82 @@
       workMinutes: workMinutes
     };
 
-    if (editId) {
-      records = records.map(function(r) { return r.id === entry.id ? entry : r; });
-    } else {
-      records.push(entry);
-    }
+    // ── スプレッドシート「相談記録」シートへ保存（新規・編集とも） ──
+    var nowJST = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    var assigneeName = ASSIGNEE_LABEL[entry.assignee] || entry.assignee || '';
+    var statusJp = CONSULT_STATUS[entry.status] ? CONSULT_STATUS[entry.status].label : entry.status;
+    var todoFlagStr = entry.todoFlag ? 'TRUE' : 'FALSE';
 
-    saveConsultations(records);
-    syncConsultTodo(entry);
-    addActivity(editId ? 'consultation_updated' : 'consultation_created', actText(entry.client, '相談記録', 'を' + (editId ? '更新' : '追加')));
+    var sheetData = {
+      sheet: '相談記録',
+      action: editId ? 'updateRow' : undefined,
+      updateKey: editId ? 'ID' : undefined,
+      'ID':               editId ? String(entry.id) : String(Date.now()),
+      '登録日':           entry.datetime || nowJST,
+      'クライアント名':   entry.client,
+      '相談区分':         entry.category,
+      '相談内容':         entry.content,
+      '対応内容':         entry.reply,
+      '担当者':           assigneeName,
+      'ステータス':       statusJp,
+      '期限':             entry.due,
+      '備考':             entry.memo,
+      '更新日時':         nowJST,
+      '開始時刻':         workStart,
+      '終了時刻':         workEnd,
+      '作業時間（分）':   workMinutes,
+      '要対応フラグ':     todoFlagStr,
+      '要対応フラグ（TRUE / FALSE）': todoFlagStr
+    };
+    // editId がない（新規）なら action / updateKey を削除
+    if (!editId) { delete sheetData.action; delete sheetData.updateKey; }
 
-    // スプレッドシート「相談記録」シートへ保存（新規追加時のみ）
-    if (!editId) {
-      var nowJST = new Date().toISOString().slice(0, 19).replace('T', ' ');
-      var assigneeName = ASSIGNEE_LABEL[entry.assignee] || entry.assignee || '';
-      var statusJp = CONSULT_STATUS[entry.status] ? CONSULT_STATUS[entry.status].label : entry.status;
-      var sheetData = {
-        sheet: '相談記録',
-        'ID':           String(Date.now()),
-        '登録日':       nowJST,
-        'クライアント名': entry.client,
-        '相談区分':     entry.category,
-        '相談内容':     entry.content,
-        '対応内容':     entry.reply,
-        '担当者':       assigneeName,
-        'ステータス':   statusJp,
-        '期限':         entry.due,
-        '備考':         entry.memo,
-        '更新日時':     nowJST,
-        '開始時刻':     workStart,
-        '終了時刻':     workEnd,
-        '作業時間（分）': workMinutes,
-        '要対応フラグ': entry.todoFlag ? 'TRUE' : 'FALSE',
-        '要対応フラグ（TRUE / FALSE）': entry.todoFlag ? 'TRUE' : 'FALSE'
-      };
-      console.log('[saveConsultation] スプレッドシート送信:', JSON.stringify(sheetData));
-      fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(sheetData)
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(result) {
-        if (result && result.error) {
-          console.error('[saveConsultation] スプレッドシート保存失敗:', result.error);
-        } else {
-          console.log('[saveConsultation] ✅ スプレッドシート保存成功');
-          console.log('[saveConsultation] 要対応フラグ保存値: ' + (result.todoFlag || '(不明)'));
-          console.log('[saveConsultation] シートヘッダー: ' + JSON.stringify(result.headers || []));
-        }
-      })
-      .catch(function(e) {
-        console.error('[saveConsultation] スプレッドシート保存エラー:', e);
-      });
-    }
+    console.log('[saveConsultation] ★送信payload:', JSON.stringify(sheetData, null, 2));
+    console.log('[saveConsultation] 要対応フラグ送信値: ' + todoFlagStr);
 
-    clearConsultForm();
-    document.getElementById('consult-form-card').style.display = 'none';
-    var msg = document.getElementById('consult-save-msg');
-    if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
-    renderConsultList();
+    // 保存ボタンを無効化して二重送信防止
+    var saveBtn = document.querySelector('#consult-form-card .btn-primary');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '保存中…'; }
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(sheetData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result && result.error) {
+        console.error('[saveConsultation] ❌ スプレッドシート保存失敗:', result.error);
+        alert('スプレッドシート保存に失敗しました:\n' + result.error);
+        return;
+      }
+      console.log('[saveConsultation] ✅ スプレッドシート保存成功');
+      console.log('[saveConsultation] 要対応フラグ保存値: ' + (result.todoFlag || '(不明)'));
+      console.log('[saveConsultation] シートヘッダー: ' + JSON.stringify(result.headers || []));
+
+      // GAS保存成功後にローカル更新
+      if (editId) {
+        records = records.map(function(r) { return r.id === entry.id ? entry : r; });
+      } else {
+        records.push(entry);
+      }
+      saveConsultations(records);
+      syncConsultTodo(entry);
+      addActivity(editId ? 'consultation_updated' : 'consultation_created', actText(entry.client, '相談記録', 'を' + (editId ? '更新' : '追加')));
+
+      clearConsultForm();
+      document.getElementById('consult-form-card').style.display = 'none';
+      var msg = document.getElementById('consult-save-msg');
+      if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
+      renderConsultList();
+    })
+    .catch(function(e) {
+      console.error('[saveConsultation] ❌ 通信エラー:', e);
+      alert('スプレッドシートへの通信に失敗しました。\nネットワークを確認してください。');
+    })
+    .finally(function() {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
+    });
   }
 
   function editConsultation(id) {

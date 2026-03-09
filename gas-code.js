@@ -306,16 +306,21 @@ function handleCompleteTodo_(ss, data) {
 // --------------- 行更新処理（既存行のステータス等を更新） ---------------
 // appendRow は使わず、必ず該当IDの行を探して上書きする
 function handleUpdateRow_(ss, data) {
-  var sheet = ss.getSheetByName(SHEET_TODO);
-  if (!sheet) return jsonResponse_({ error: 'TODOシートが見つかりません' });
+  // シート名の指定があればそちらを使う（なければTODOシート）
+  var sheetName = data.sheet || SHEET_TODO;
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return jsonResponse_({ error: 'シート「' + sheetName + '」が見つかりません' });
 
   var allData = sheet.getDataRange().getValues();
   var headers = allData[0];
-  var idCol = headers.indexOf('ID');
-  if (idCol === -1) return jsonResponse_({ error: 'ID列が見つかりません' });
 
-  var targetId = String(data.id);
-  Logger.log('[updateRow] 対象ID: ' + targetId + ', 状態: ' + data['状態']);
+  // 検索キー列の指定（デフォルトは 'ID'）
+  var keyCol = data.updateKey || 'ID';
+  var idCol = headers.indexOf(keyCol);
+  if (idCol === -1) return jsonResponse_({ error: keyCol + '列が見つかりません（シート: ' + sheetName + '）' });
+
+  var targetId = String(data[keyCol] || data.id || '');
+  Logger.log('[updateRow] シート=' + sheetName + ', キー=' + keyCol + ', 対象ID=' + targetId);
 
   for (var i = 1; i < allData.length; i++) {
     if (String(allData[i][idCol]) === targetId) {
@@ -326,12 +331,12 @@ function handleUpdateRow_(ss, data) {
       for (var j = 0; j < headers.length; j++) {
         var colName = headers[j];
         // ID・作成日・記録済は変更しない
-        if (colName === 'ID' || colName === '作成日' || colName === '記録済') continue;
-        // 更新日はGAS側の現在日時（JST）を強制使用（ブラウザの値は無視）
-        if (colName === '更新日') {
+        if (colName === keyCol || colName === '作成日' || colName === '記録済') continue;
+        // 更新日・更新日時はGAS側の現在日時（JST）を強制使用
+        if (colName === '更新日' || colName === '更新日時') {
           var updateNowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
           sheet.getRange(rowNum, j + 1).setValue(updateNowJST);
-          Logger.log('[updateRow] 更新日をGAS側 JST でセット: ' + updateNowJST);
+          Logger.log('[updateRow] ' + colName + 'をGAS側 JST でセット: ' + updateNowJST);
           continue;
         }
         if (data[colName] !== undefined) {
@@ -344,7 +349,7 @@ function handleUpdateRow_(ss, data) {
     }
   }
 
-  return jsonResponse_({ error: '該当ID(' + targetId + ')が見つかりません' });
+  return jsonResponse_({ error: '該当ID(' + targetId + ')がシート「' + sheetName + '」に見つかりません' });
 }
 
 // --------------- ユーティリティ ---------------
