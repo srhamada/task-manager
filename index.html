@@ -273,6 +273,25 @@
       color: #6d4c41;
     }
 
+    /* 算定年更管理テーブル */
+    .bs-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .bs-table th, .bs-table td { border: 1px solid #dde5dd; padding: 5px 7px; text-align: center; white-space: nowrap; }
+    .bs-table thead th { background: #f0f5f0; color: #1a3320; font-weight: 600; font-size: 0.78rem; position: sticky; top: 0; z-index: 2; }
+    .bs-group-header th { border-bottom: 2px solid #c8ddc8; padding: 4px 0; font-size: 0.75rem; }
+    .bs-group-nendo { background: #fff3e0 !important; color: #e65100; }
+    .bs-group-santei { background: #e3f2fd !important; color: #1565c0; }
+    .bs-th-fixed { background: #e8f0e8 !important; }
+    .bs-th-step { min-width: 72px; }
+    .bs-table tbody td { background: #fff; }
+    .bs-table tbody tr:hover td { background: #f8fbf8; }
+    .bs-table tbody td input,
+    .bs-table tbody td select { border: none; background: transparent; text-align: center; width: 100%; font-size: 0.82rem; padding: 2px; outline: none; }
+    .bs-table tbody td input:focus,
+    .bs-table tbody td select:focus { background: #fffde7; }
+    .bs-table tbody td.bs-client-cell input { text-align: left; min-width: 120px; }
+    .bs-table tbody td.bs-comment-cell input { text-align: left; min-width: 120px; }
+    .bs-table .bs-del-btn { background: none; border: 1px solid #efcbcb; border-radius: 4px; cursor: pointer; font-size: 0.72rem; color: #c62828; padding: 1px 6px; }
+
     .status-active     { background: #e8f5e9; color: #2e7d32; }
     .status-prospect   { background: #e3f2fd; color: #1565c0; }
     .status-inprogress { background: #fff3e0; color: #e65100; }
@@ -1500,22 +1519,75 @@
     </div>
   </div>
 
-  <!-- 算定年更管理（仮ページ） -->
+  <!-- 算定年更管理 -->
   <div class="page" id="page-busy-season">
     <div class="page-header">
       <h1>算定年更管理</h1>
     </div>
-    <div class="card" style="text-align:center;padding:60px 20px;">
-      <div style="font-size:2.5rem;margin-bottom:16px;">📊</div>
-      <div style="font-size:1.1rem;font-weight:600;color:#1a3320;margin-bottom:8px;">このページは準備中です</div>
-      <div style="font-size:0.88rem;color:#9e9e9e;">算定基礎届・年度更新の進捗管理機能を実装予定です。</div>
+
+    <!-- 操作バー -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <label class="form-label" style="display:inline;margin-right:4px;">年度</label>
+          <select id="bs-year" class="form-select" style="width:110px;" onchange="fetchBusySeasonRecords()">
+          </select>
+        </div>
+        <div>
+          <label class="form-label" style="display:inline;margin-right:4px;">検索</label>
+          <input type="text" id="bs-search" class="form-input" placeholder="顧問先名" style="width:160px;" oninput="renderBusySeasonTable()" />
+        </div>
+        <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="loadActiveClientsIntoBusySeason()">契約クライアント読込</button>
+        <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="addBusySeasonRow()">＋ 行追加</button>
+        <button class="btn btn-primary" id="bs-save-btn" style="font-size:0.82rem;" onclick="saveBusySeasonRecords()">保存</button>
+        <span id="bs-save-msg" style="display:none;font-size:0.82rem;color:#2e7d32;font-weight:600;">保存しました</span>
+        <span id="bs-save-error" style="display:none;font-size:0.82rem;color:#c62828;font-weight:600;"></span>
+      </div>
+    </div>
+
+    <!-- 一覧テーブル -->
+    <div class="card" style="padding:0;overflow:auto;">
+      <table class="bs-table">
+        <thead>
+          <tr class="bs-group-header">
+            <th colspan="3"></th>
+            <th colspan="7" class="bs-group-nendo">年度更新</th>
+            <th colspan="6" class="bs-group-santei">算定基礎</th>
+            <th colspan="2"></th>
+          </tr>
+          <tr>
+            <th class="bs-th-fixed" style="min-width:50px;">年度</th>
+            <th class="bs-th-fixed" style="min-width:60px;">区分</th>
+            <th class="bs-th-fixed" style="min-width:140px;">顧問先名</th>
+            <th class="bs-th-step">資料回収</th>
+            <th class="bs-th-step">データ作成</th>
+            <th class="bs-th-step">申告書作成</th>
+            <th class="bs-th-step">申告</th>
+            <th class="bs-th-step">納付書作成</th>
+            <th class="bs-th-step">納付額通知</th>
+            <th class="bs-th-step">公文書通知</th>
+            <th class="bs-th-step">データ作成</th>
+            <th class="bs-th-step">申告書作成</th>
+            <th class="bs-th-step">申請</th>
+            <th class="bs-th-step">結果取込</th>
+            <th class="bs-th-step">保険料通知</th>
+            <th class="bs-th-step">公文書通知</th>
+            <th style="min-width:140px;">コメント</th>
+            <th style="min-width:90px;">更新日</th>
+          </tr>
+        </thead>
+        <tbody id="bs-tbody"></tbody>
+      </table>
+      <div id="bs-empty" style="display:none;text-align:center;color:#9e9e9e;padding:32px;font-size:0.88rem;">
+        データがありません。「契約クライアント読込」または「＋ 行追加」で行を追加してください。
+      </div>
     </div>
   </div>
 
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-09-v14 (相談記録TODO統合表示)');
+  console.log('[app] コードバージョン: 2026-03-09-v15 (算定年更管理)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1531,6 +1603,7 @@
     if (name === 'consultation')   initConsultPage();
     if (name === 'inquiry')        initInquiryPage();
     if (name === 'calendar')       initCalendarPage();
+    if (name === 'busy-season')    initBusySeasonPage();
     if (name === 'dashboard')      { refreshFromSheet(); renderActivityList(); }
   }
 
@@ -4502,6 +4575,195 @@
       addActivity('todo_updated', actText(target.client, target.text, ' を更新'));
       syncTaskToSheet(target);
     }
+  }
+
+  // ===== 算定年更管理 =====
+
+  var busySeasonRows = []; // 画面上の行データ
+
+  var BS_HEADERS = ['年度','顧問先区分','顧問先名',
+    '年度更新_資料回収','年度更新_データ作成','年度更新_申告書作成','年度更新_申告',
+    '年度更新_納付書作成','年度更新_納付額通知','年度更新_公文書通知',
+    '算定基礎_データ作成','算定基礎_申告書作成','算定基礎_申請',
+    '算定基礎_結果取込','算定基礎_保険料通知','算定基礎_公文書通知',
+    'コメント','更新日'];
+
+  // 工程列（D〜P: index 3〜15）
+  var BS_STEP_COLS = BS_HEADERS.slice(3, 16);
+
+  function initBusySeasonPage() {
+    // 年度セレクト初期化
+    var sel = document.getElementById('bs-year');
+    if (!sel) return;
+    var thisYear = new Date().getFullYear();
+    sel.innerHTML = '';
+    for (var y = thisYear + 1; y >= thisYear - 3; y--) {
+      var opt = document.createElement('option');
+      opt.value = y; opt.textContent = y + '年度';
+      if (y === thisYear) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    fetchBusySeasonRecords();
+  }
+
+  function fetchBusySeasonRecords() {
+    var year = (document.getElementById('bs-year') || {}).value || '';
+    console.log('[busySeason] 取得: 年度=' + year);
+    fetch(GAS_URL + '?action=getBusySeasonRecords&year=' + encodeURIComponent(year))
+      .then(function(res) { return res.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) rows = [];
+        console.log('[busySeason] 取得件数: ' + rows.length);
+        busySeasonRows = rows.map(function(row) {
+          var obj = {};
+          BS_HEADERS.forEach(function(h) { obj[h] = row[h] !== undefined ? String(row[h]) : ''; });
+          if (!obj['年度']) obj['年度'] = year;
+          return obj;
+        });
+        renderBusySeasonTable();
+      })
+      .catch(function(e) {
+        console.error('[busySeason] 取得失敗:', e);
+      });
+  }
+
+  function renderBusySeasonTable() {
+    var tbody = document.getElementById('bs-tbody');
+    var empty = document.getElementById('bs-empty');
+    if (!tbody) return;
+
+    var q = ((document.getElementById('bs-search') || {}).value || '').toLowerCase();
+    var filtered = busySeasonRows.filter(function(r, i) {
+      r._idx = i; // 元のindex保持
+      if (q && (r['顧問先名'] || '').toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    tbody.innerHTML = filtered.map(function(row) {
+      var idx = row._idx;
+      // 工程セル
+      var stepCells = BS_STEP_COLS.map(function(col) {
+        return '<td><input data-idx="' + idx + '" data-col="' + col + '" value="' + esc(row[col] || '') + '" onchange="updateBsCell(this)" /></td>';
+      }).join('');
+
+      return '<tr>' +
+        '<td>' + esc(row['年度'] || '') + '</td>' +
+        '<td><select data-idx="' + idx + '" data-col="顧問先区分" onchange="updateBsCell(this)">' +
+          '<option value="契約"' + (row['顧問先区分'] === '契約' ? ' selected' : '') + '>契約</option>' +
+          '<option value="その他"' + (row['顧問先区分'] === 'その他' ? ' selected' : '') + '>その他</option>' +
+        '</select></td>' +
+        '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="顧問先名" value="' + esc(row['顧問先名'] || '') + '" onchange="updateBsCell(this)" /></td>' +
+        stepCells +
+        '<td class="bs-comment-cell"><input data-idx="' + idx + '" data-col="コメント" value="' + esc(row['コメント'] || '') + '" onchange="updateBsCell(this)" /></td>' +
+        '<td style="font-size:0.75rem;color:#9e9e9e;">' + esc((row['更新日'] || '').slice(0, 10)) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function updateBsCell(el) {
+    var idx = parseInt(el.getAttribute('data-idx'), 10);
+    var col = el.getAttribute('data-col');
+    if (busySeasonRows[idx]) {
+      busySeasonRows[idx][col] = el.value;
+    }
+  }
+
+  function loadActiveClientsIntoBusySeason() {
+    var year = (document.getElementById('bs-year') || {}).value || String(new Date().getFullYear());
+    var clients = loadClients().filter(function(c) { return c.status === 'active'; });
+    if (clients.length === 0) {
+      alert('契約中のクライアントがありません。');
+      return;
+    }
+    // 既存の顧問先名リスト
+    var existing = {};
+    busySeasonRows.forEach(function(r) { existing[r['顧問先名']] = true; });
+
+    var added = 0;
+    clients.forEach(function(c) {
+      if (existing[c.name]) return; // 重複スキップ
+      var row = {};
+      BS_HEADERS.forEach(function(h) { row[h] = ''; });
+      row['年度'] = year;
+      row['顧問先区分'] = '契約';
+      row['顧問先名'] = c.name;
+      busySeasonRows.push(row);
+      existing[c.name] = true;
+      added++;
+    });
+
+    if (added === 0) {
+      alert('追加できるクライアントはありません（全て読込済みです）。');
+    } else {
+      console.log('[busySeason] クライアント読込: ' + added + '件追加');
+    }
+    renderBusySeasonTable();
+  }
+
+  function addBusySeasonRow() {
+    var year = (document.getElementById('bs-year') || {}).value || String(new Date().getFullYear());
+    var row = {};
+    BS_HEADERS.forEach(function(h) { row[h] = ''; });
+    row['年度'] = year;
+    row['顧問先区分'] = 'その他';
+    busySeasonRows.push(row);
+    renderBusySeasonTable();
+    // 最後の行にスクロール
+    var tbody = document.getElementById('bs-tbody');
+    if (tbody && tbody.lastElementChild) {
+      tbody.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function saveBusySeasonRecords() {
+    var year = (document.getElementById('bs-year') || {}).value || '';
+    if (!year) { alert('年度を選択してください。'); return; }
+
+    var btn = document.getElementById('bs-save-btn');
+    var msg = document.getElementById('bs-save-msg');
+    var errMsg = document.getElementById('bs-save-error');
+    if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+    if (msg) msg.style.display = 'none';
+    if (errMsg) errMsg.style.display = 'none';
+
+    var postData = {
+      action: 'saveBusySeasonRecords',
+      year: year,
+      rows: busySeasonRows
+    };
+
+    console.log('[busySeason] 保存: 年度=' + year + ', 行数=' + busySeasonRows.length);
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      console.log('[busySeason] 保存結果:', JSON.stringify(result));
+      if (!result || result.success !== true) {
+        if (errMsg) { errMsg.textContent = '保存失敗: ' + (result && result.error || '不明'); errMsg.style.display = ''; }
+        return;
+      }
+      if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
+      // 保存後に再取得（更新日を反映）
+      fetchBusySeasonRecords();
+    })
+    .catch(function(e) {
+      console.error('[busySeason] 保存エラー:', e);
+      if (errMsg) { errMsg.textContent = '通信エラー'; errMsg.style.display = ''; }
+    })
+    .finally(function() {
+      if (btn) { btn.disabled = false; btn.textContent = '保存'; }
+    });
   }
 
   // ===== 作業時間ヘルパー =====

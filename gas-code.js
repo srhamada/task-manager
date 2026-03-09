@@ -10,6 +10,7 @@ var SHEET_PAYROLL = '給与計算記録';
 var SHEET_CLIENT  = 'クライアント';
 var SHEET_INQUIRY = '行政問い合わせ記録';
 var SHEET_CONSULT = '相談記録';
+var SHEET_BUSY    = '算定年更管理';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
@@ -23,6 +24,11 @@ function doGet(e) {
   // ── 相談記録TODO取得（O列=TRUE かつ H列≠完了） ──
   if (action === 'getConsultTodos') {
     return handleGetConsultTodos_();
+  }
+
+  // ── 算定年更管理データ取得 ──
+  if (action === 'getBusySeasonRecords') {
+    return handleGetBusySeasonRecords_(e);
   }
 
   var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
@@ -111,6 +117,11 @@ function doPost(e) {
     // ── 相談記録TODO完了（O列をFALSEに） ──
     if (data.action === 'completeConsultTodo') {
       return handleCompleteConsultTodo_(ss, data);
+    }
+
+    // ── 算定年更管理 一括保存 ──
+    if (data.action === 'saveBusySeasonRecords') {
+      return handleSaveBusySeasonRecords_(ss, data);
     }
 
     // ── 行更新アクション ──
@@ -461,6 +472,99 @@ function handleCompleteConsultTodo_(ss, data) {
   }
 
   return jsonResponse_({ success: false, error: '該当ID(' + targetId + ')が見つかりません' });
+}
+
+// --------------- 算定年更管理 ---------------
+
+// データ取得（年度フィルタ対応）
+function handleGetBusySeasonRecords_(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_BUSY);
+  if (!sheet) {
+    // シートが無ければ空配列を返す（フロント側で初回読込時に対応）
+    Logger.log('[getBusySeason] シート未作成');
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var year = (e && e.parameter && e.parameter.year) ? String(e.parameter.year) : '';
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var result = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    // 年度フィルタ
+    if (year && String(obj['年度']) !== year) continue;
+    result.push(obj);
+  }
+
+  Logger.log('[getBusySeason] 年度=' + (year || '全件') + ', 件数=' + result.length);
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 一括保存（全行を差し替え）
+function handleSaveBusySeasonRecords_(ss, data) {
+  var rows = data.rows;
+  if (!Array.isArray(rows)) {
+    return jsonResponse_({ success: false, error: 'rows が配列ではありません' });
+  }
+
+  var sheet = ss.getSheetByName(SHEET_BUSY);
+  var headers = ['年度','顧問先区分','顧問先名',
+    '年度更新_資料回収','年度更新_データ作成','年度更新_申告書作成','年度更新_申告',
+    '年度更新_納付書作成','年度更新_納付額通知','年度更新_公文書通知',
+    '算定基礎_データ作成','算定基礎_申告書作成','算定基礎_申請',
+    '算定基礎_結果取込','算定基礎_保険料通知','算定基礎_公文書通知',
+    'コメント','更新日'];
+
+  // シートが無ければ作成
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_BUSY);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    Logger.log('[saveBusySeason] シート新規作成');
+  }
+
+  var year = data.year ? String(data.year) : '';
+  Logger.log('[saveBusySeason] 年度=' + year + ', 行数=' + rows.length);
+
+  // 既存データ読み込み
+  var existingData = sheet.getDataRange().getValues();
+  var existingHeaders = existingData[0];
+  var yearCol = existingHeaders.indexOf('年度');
+
+  // 指定年度以外の行を保持
+  var keepRows = [];
+  for (var i = 1; i < existingData.length; i++) {
+    if (year && String(existingData[i][yearCol]) !== year) {
+      keepRows.push(existingData[i]);
+    }
+  }
+
+  // 新しい行を構築
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  var newRows = rows.map(function(row) {
+    return headers.map(function(h) {
+      if (h === '更新日') return nowJST;
+      return row[h] !== undefined ? row[h] : '';
+    });
+  });
+
+  // 全データ = ヘッダー + 他年度 + 今回年度
+  var allRows = [headers].concat(keepRows).concat(newRows);
+
+  // シートをクリアして書き直し
+  sheet.clearContents();
+  if (allRows.length > 0) {
+    sheet.getRange(1, 1, allRows.length, headers.length).setValues(allRows);
+  }
+
+  Logger.log('[saveBusySeason] 保存完了: 全' + (allRows.length - 1) + '行（今回' + newRows.length + '行）');
+  return jsonResponse_({ success: true, savedCount: newRows.length, totalCount: allRows.length - 1 });
 }
 
 // --------------- ユーティリティ ---------------
