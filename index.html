@@ -248,6 +248,8 @@
     }
     .status-active     { background: #e8f5e9; color: #2e7d32; }
     .status-prospect   { background: #e3f2fd; color: #1565c0; }
+    .status-inprogress { background: #fff3e0; color: #e65100; }
+    .status-waiting    { background: #ede7f6; color: #4527a0; }
     .status-terminated { background: #fafafa; color: #9e9e9e; border: 1px solid #e0e0e0; }
     /* 旧ステータス（後方互換） */
     .status-inactive { background: #fafafa; color: #9e9e9e; border: 1px solid #e0e0e0; }
@@ -3756,14 +3758,14 @@
   var consultFilter = 'all';
 
   var CONSULT_STATUS = {
-    '対応中':   { cls: 'status-prospect',   label: '対応中'   },
-    '確認待ち': { cls: 'status-prospect',   label: '確認待ち' },
+    '対応中':   { cls: 'status-inprogress', label: '対応中'   },
+    '確認待ち': { cls: 'status-waiting',    label: '確認待ち' },
     '保留':     { cls: 'status-active',     label: '保留'     },
     '完了':     { cls: 'status-terminated', label: '完了'     },
     // 旧コード互換
-    inprogress: { cls: 'status-prospect',   label: '対応中'   },
+    inprogress: { cls: 'status-inprogress', label: '対応中'   },
     replied:    { cls: 'status-active',     label: '回答済'   },
-    waiting:    { cls: 'status-prospect',   label: '確認待ち' },
+    waiting:    { cls: 'status-waiting',    label: '確認待ち' },
     done:       { cls: 'status-terminated', label: '完了'     }
   };
 
