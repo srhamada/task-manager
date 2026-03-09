@@ -1355,7 +1355,9 @@
               <th>カテゴリ</th>
               <th>相談内容（抜粋）</th>
               <th>担当者</th>
+              <th>作業時間</th>
               <th>ステータス</th>
+              <th>要対応</th>
               <th></th>
             </tr>
           </thead>
@@ -3699,13 +3701,27 @@
       var excerpt = (r.content || '').replace(/\n/g, ' ');
       if (excerpt.length > 30) excerpt = excerpt.slice(0, 30) + '…';
       var tr = document.createElement('tr');
+      // 作業時間表示
+      var wStart = formatTime(r.workStart || '');
+      var wEnd   = formatTime(r.workEnd   || '');
+      var wMins  = parseInt(r.workMinutes, 10) || 0;
+      var workDisp = '';
+      if (wStart && wEnd) {
+        workDisp = wStart + '〜' + wEnd + '（' + wMins + '分）';
+      } else if (wMins > 0) {
+        workDisp = wMins + '分';
+      }
+      var todoDisp = r.todoFlag ? '<span style="color:#1976d2;font-weight:600;">●</span>' : '';
+
       tr.innerHTML =
         '<td style="white-space:nowrap;">' + esc(dtStr) + '</td>' +
         '<td><strong>' + esc(r.client || '—') + '</strong></td>' +
         '<td>' + esc(r.category || '—') + '</td>' +
         '<td style="max-width:220px;">' + esc(excerpt || '—') + '</td>' +
         '<td>' + esc(asgn) + '</td>' +
+        '<td style="white-space:nowrap;font-size:0.82rem;">' + esc(workDisp || '—') + '</td>' +
         '<td><span class="status-badge ' + meta.cls + '">' + meta.label + '</span></td>' +
+        '<td style="text-align:center;">' + todoDisp + '</td>' +
         '<td style="white-space:nowrap;">' +
           '<button onclick="openConsultDetail(' + r.id + ')" class="btn btn-secondary" style="padding:4px 10px;font-size:0.78rem;margin-right:4px;">詳細</button>' +
           '<button onclick="editConsultation(' + r.id + ')" style="background:none;border:1px solid #dde5dd;border-radius:6px;cursor:pointer;font-size:0.78rem;color:#5a7a5e;padding:3px 8px;margin-right:4px;">編集</button>' +
@@ -3887,6 +3903,12 @@
     document.getElementById('consult-memo').value     = r.memo     || '';
     var todoFlag = document.getElementById('consult-todo-flag');
     if (todoFlag) todoFlag.checked = !!r.todoFlag;
+    var wsEl = document.getElementById('consult-work-start');
+    var weEl = document.getElementById('consult-work-end');
+    var wmEl = document.getElementById('consult-work-minutes');
+    if (wsEl) wsEl.value = r.workStart || '';
+    if (weEl) weEl.value = r.workEnd   || '';
+    if (wmEl) wmEl.value = r.workMinutes || '';
     var card = document.getElementById('consult-form-card');
     if (card) { card.style.display = ''; card.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }
@@ -3964,6 +3986,14 @@
         dRow('先方担当者', esc(r.contact || '—')) +
         dRow('カテゴリ', esc(r.category || '—')) +
         dRow('次回対応期限', esc(dueStr)) +
+        (function() {
+          var ws = formatTime(r.workStart || '');
+          var we = formatTime(r.workEnd   || '');
+          var wm = parseInt(r.workMinutes, 10) || 0;
+          var timeStr = (ws && we) ? ws + ' 〜 ' + we + '（' + wm + '分）' : wm > 0 ? wm + '分' : '—';
+          return dRow('作業時間', esc(timeStr));
+        })() +
+        dRow('要対応', r.todoFlag ? '<span style="color:#1976d2;font-weight:600;">あり</span>' : '—') +
         '<div style="grid-column:1/-1;"><div class="form-label" style="margin-bottom:4px;">相談内容</div>' +
           '<div style="white-space:pre-wrap;font-size:0.88rem;line-height:1.65;background:#f8fbf8;border-radius:8px;padding:10px 14px;">' + esc(r.content || '—') + '</div></div>' +
         (r.reply ? '<div style="grid-column:1/-1;"><div class="form-label" style="margin-bottom:4px;">返答内容</div>' +
