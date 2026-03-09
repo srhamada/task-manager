@@ -3840,7 +3840,8 @@
         '更新日時':     nowJST,
         '開始時刻':     workStart,
         '終了時刻':     workEnd,
-        '作業時間（分）': workMinutes
+        '作業時間（分）': workMinutes,
+        '要対応フラグ': entry.todoFlag ? 'TRUE' : 'FALSE'
       };
       console.log('[saveConsultation] スプレッドシート送信:', JSON.stringify(sheetData));
       fetch(GAS_URL, {
@@ -3905,8 +3906,9 @@
     // この相談記録に紐付いた既存タスクを削除
     tasks = tasks.filter(function(t) { return t.consultId !== entry.id; });
 
-    // TODOに出す条件: 要対応チェック OR ステータスが対応中/確認待ち
-    var needTodo = entry.todoFlag || entry.status === 'inprogress' || entry.status === 'waiting';
+    // TODOに出す条件: 要対応フラグ=TRUE かつ ステータスが完了でない
+    var statusLabel = CONSULT_STATUS[entry.status] ? CONSULT_STATUS[entry.status].label : entry.status;
+    var needTodo = entry.todoFlag && statusLabel !== '完了';
     if (!needTodo) {
       saveTasks(tasks);
       updateAllStats();
@@ -3919,8 +3921,8 @@
     var title = (clientName ? clientName + '：' : '') + summary + (entry.content && entry.content.length > 20 ? '…' : '');
 
     // 相談ステータス → タスクステータスの対応
-    var taskStatus = (entry.status === 'inprogress') ? 'inprogress'
-                   : (entry.status === 'waiting')    ? 'waiting'
+    var taskStatus = (entry.status === '確認待ち' || entry.status === 'waiting') ? 'waiting'
+                   : (entry.status === '対応中'   || entry.status === 'inprogress') ? 'inprogress'
                    : 'todo';
 
     var maxId = tasks.reduce(function(m, t) { return Math.max(m, t.id || 0); }, 0);
@@ -3928,8 +3930,8 @@
       id:         maxId + 1,
       consultId:  entry.id,          // 相談記録との紐付け
       client:     clientName,
-      text:       title || entry.category || '相談対応',
-      category:   entry.category || '相談対応',
+      text:       title || '相談対応',
+      category:   '相談記録',
       assignee:   entry.assignee || '',
       due:        entry.due || '',
       status:     taskStatus,
