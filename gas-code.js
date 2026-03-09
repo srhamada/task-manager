@@ -16,7 +16,15 @@ var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計
 
 // --------------- doGet: シートデータを返す ---------------
 // パラメータ ?sheet=記録 で取得先を切り替え可能（デフォルト: TODO）
+// パラメータ ?action=getConsultTodos で相談記録の要対応データのみ返す
 function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+
+  // ── 相談記録TODO取得（O列=TRUE かつ H列≠完了） ──
+  if (action === 'getConsultTodos') {
+    return handleGetConsultTodos_();
+  }
+
   var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
@@ -45,6 +53,44 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// --------------- 相談記録TODO取得 ---------------
+function handleGetConsultTodos_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_CONSULT);
+  if (!sheet) {
+    return jsonResponse_({ error: 'シート「' + SHEET_CONSULT + '」が見つかりません' });
+  }
+
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  Logger.log('[getConsultTodos] ヘッダー: ' + JSON.stringify(headers));
+
+  // ヘッダーから列インデックスを取得
+  var flagCol   = headers.indexOf('要対応フラグ');
+  var statusCol = headers.indexOf('ステータス');
+  Logger.log('[getConsultTodos] 要対応フラグ列=' + flagCol + ', ステータス列=' + statusCol);
+
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    // 要対応フラグ: TRUE / "TRUE" / true を全て吸収
+    var flagVal = (flagCol >= 0) ? String(data[i][flagCol]).toUpperCase().trim() : '';
+    var statusVal = (statusCol >= 0) ? String(data[i][statusCol]).trim() : '';
+
+    if (flagVal !== 'TRUE') continue;
+    if (statusVal === '完了') continue;
+
+    var obj = { _rowIndex: i + 1 }; // スプレッドシートの行番号
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    result.push(obj);
+  }
+
+  Logger.log('[getConsultTodos] 対象件数: ' + result.length);
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // --------------- doPost: アクション振り分け ---------------
 function doPost(e) {
   try {
@@ -60,6 +106,11 @@ function doPost(e) {
     if (data.action === 'completeTodo') {
       Logger.log('[doPost] ★completeTodo呼出前: 開始時刻=' + data['開始時刻'] + ', 終了時刻=' + data['終了時刻'] + ', 作業時間=' + data['作業時間']);
       return handleCompleteTodo_(ss, data);
+    }
+
+    // ── 相談記録TODO完了（O列をFALSEに） ──
+    if (data.action === 'completeConsultTodo') {
+      return handleCompleteConsultTodo_(ss, data);
     }
 
     // ── 行更新アクション ──
@@ -364,6 +415,52 @@ function handleUpdateRow_(ss, data) {
   }
 
   return jsonResponse_({ error: '該当ID(' + targetId + ')がシート「' + sheetName + '」に見つかりません' });
+}
+
+// --------------- 相談記録TODO完了 ---------------
+function handleCompleteConsultTodo_(ss, data) {
+  var sheet = ss.getSheetByName(SHEET_CONSULT);
+  if (!sheet) return jsonResponse_({ success: false, error: 'シート「' + SHEET_CONSULT + '」が見つかりません' });
+
+  var allData = sheet.getDataRange().getValues();
+  var headers = allData[0];
+  var idCol     = headers.indexOf('ID');
+  var flagCol   = headers.indexOf('要対応フラグ');
+  var statusCol = headers.indexOf('ステータス');
+  var updateCol = headers.indexOf('更新日時');
+
+  Logger.log('[completeConsultTodo] ID列=' + idCol + ', 要対応フラグ列=' + flagCol + ', ステータス列=' + statusCol);
+
+  if (idCol === -1) return jsonResponse_({ success: false, error: 'ID列が見つかりません' });
+  if (flagCol === -1) return jsonResponse_({ success: false, error: '要対応フラグ列が見つかりません' });
+
+  var targetId = String(data.consultId || data.id || '');
+  Logger.log('[completeConsultTodo] 対象ID=' + targetId);
+
+  for (var i = 1; i < allData.length; i++) {
+    if (String(allData[i][idCol]) === targetId) {
+      var rowNum = i + 1;
+      // O列を FALSE に
+      sheet.getRange(rowNum, flagCol + 1).setValue('FALSE');
+      Logger.log('[completeConsultTodo] 行' + rowNum + ' 要対応フラグ → FALSE');
+
+      // H列(ステータス)を「完了」に
+      if (statusCol >= 0) {
+        sheet.getRange(rowNum, statusCol + 1).setValue('完了');
+        Logger.log('[completeConsultTodo] 行' + rowNum + ' ステータス → 完了');
+      }
+
+      // K列(更新日時)を現在時刻に
+      if (updateCol >= 0) {
+        var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+        sheet.getRange(rowNum, updateCol + 1).setValue(nowJST);
+      }
+
+      return jsonResponse_({ success: true, updatedRow: rowNum, sheetName: SHEET_CONSULT });
+    }
+  }
+
+  return jsonResponse_({ success: false, error: '該当ID(' + targetId + ')が見つかりません' });
 }
 
 // --------------- ユーティリティ ---------------

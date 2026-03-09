@@ -1463,7 +1463,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-09-v13 (相談記録スプレッドシート保存)');
+  console.log('[app] コードバージョン: 2026-03-09-v14 (相談記録TODO統合表示)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1682,14 +1682,23 @@
     { id: 5, status: 'done',       client: '株式会社ナデシコ', text: '社会保険料の納付書送付',     assignee: 'hamada',   due: '' }
   ];
 
-  // キャッシュからタスクを返す（同期）
+  // 相談記録TODO用キャッシュ
+  var consultTodosCache = [];
+
+  // キャッシュからタスクを返す（通常TODO + 相談記録TODO をマージ）
   function loadTasks() {
+    return tasksCache.slice().concat(consultTodosCache.slice());
+  }
+
+  // 通常TODOのみ返す（保存時用）
+  function loadRegularTasks() {
     return tasksCache.slice();
   }
 
-  // saveTasks は互換性のため残す（キャッシュ更新のみ）
+  // saveTasks は互換性のため残す（キャッシュ更新のみ、通常TODOのみ）
   function saveTasks(tasks) {
-    tasksCache = tasks.slice();
+    // 相談記録由来を除外して通常TODOだけ保存
+    tasksCache = tasks.filter(function(t) { return t.source !== 'consultation'; });
   }
 
   // スプレッドシートの列名 → 内部プロパティ名のマッピング
@@ -1768,10 +1777,68 @@
       });
   }
 
+  // 相談記録TODO取得（O列=TRUE のみ）
+  function fetchConsultTodosFromSheet() {
+    console.log('[fetchConsultTodos] 取得開始');
+    return fetch(GAS_URL + '?action=getConsultTodos')
+      .then(function(res) {
+        if (!res.ok) throw new Error('相談記録TODO取得失敗（HTTP ' + res.status + '）');
+        return res.json();
+      })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) {
+          if (rows && rows.error) { console.error('[fetchConsultTodos] エラー:', rows.error); return []; }
+          rows = [];
+        }
+        console.log('[fetchConsultTodos] 取得件数: ' + rows.length);
+        if (rows.length > 0) {
+          console.log('[fetchConsultTodos] 1件目:', JSON.stringify(rows[0]));
+        }
+        consultTodosCache = rows.map(function(row) {
+          var assigneeRaw = String(row['担当者'] || '');
+          var assigneeCode = ASSIGNEE_NORMALIZE[assigneeRaw] || assigneeRaw;
+          // ステータス変換
+          var statusRaw = String(row['ステータス'] || '対応中');
+          var statusCode = STATUS_JP_TO_CODE[statusRaw] || 'todo';
+          if (statusCode === 'done') statusCode = 'todo'; // 完了はフィルタ済みなので来ないはずだが安全策
+
+          return {
+            id:          'C-' + String(row['ID'] || row._rowIndex || 0),
+            consultId:   String(row['ID'] || ''),
+            _rowIndex:   row._rowIndex || 0,
+            source:      'consultation',
+            client:      String(row['クライアント名'] || ''),
+            category:    '相談記録',
+            text:        String(row['相談区分'] || '') + (row['相談内容'] ? '：' + String(row['相談内容']).replace(/\n/g, ' ').slice(0, 30) : ''),
+            consultCategory: String(row['相談区分'] || ''),
+            consultContent:  String(row['相談内容'] || ''),
+            consultReply:    String(row['対応内容'] || ''),
+            assignee:    assigneeCode,
+            status:      statusCode,
+            due:         normalizeDate(row['期限'] || ''),
+            memo:        String(row['備考'] || ''),
+            recordDate:  normalizeDate(row['登録日'] || ''),
+            workStart:   String(row['開始時刻'] || ''),
+            workEnd:     String(row['終了時刻'] || ''),
+            workMinutes: parseInt(row['作業時間'] || row['作業時間（分）'] || '0', 10) || 0,
+            todoFlag:    true,
+            recorded:    ''
+          };
+        });
+        console.log('[fetchConsultTodos] 正規化完了: ' + consultTodosCache.length + '件');
+        return consultTodosCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchConsultTodos] 失敗:', e);
+        return [];
+      });
+  }
+
   // データ再取得して画面更新
   function refreshFromSheet() {
     return Promise.all([
       fetchTasksFromSheet(),
+      fetchConsultTodosFromSheet(),
       fetchRecordsFromSheet(),
       fetchPayrollRecordsFromSheet(),
       fetchClientsFromSheet(),
@@ -1922,6 +1989,11 @@
       li.style.alignItems = 'flex-start';
       li.setAttribute('data-id', task.id);
 
+      // 相談記録由来バッジ
+      var sourceBadge = task.source === 'consultation'
+        ? '<span style="font-size:0.68rem;background:#ede7f6;color:#4527a0;padding:1px 6px;border-radius:4px;margin-right:6px;font-weight:600;">相談記録</span>'
+        : '';
+
       // 顧問先名ライン
       var clientHtml = task.client
         ? '<span style="font-weight:600;color:#263326;">' + esc(task.client) + '</span>' +
@@ -1942,12 +2014,16 @@
       var assigneeColor = task.assignee === 'hamada' ? '#FF8A8A' : task.assignee === 'takasaki' ? '#6BCBFF' : 'transparent';
       var assigneeDot = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + assigneeColor + ';flex-shrink:0;margin-right:5px;margin-top:2px;' + (task.assignee ? '' : 'border:1px solid #ccc;') + '" title="' + esc(assigneeLabel || '未設定') + '"></span>';
 
+      // IDを安全にonclickに渡す（文字列IDに対応）
+      var idArg = typeof task.id === 'string' ? "'" + task.id + "'" : task.id;
+
       li.innerHTML =
         assigneeDot +
-        '<span class="todo-badge ' + meta.cls + '" onclick="cycleStatus(' + task.id + ')" ' +
+        '<span class="todo-badge ' + meta.cls + '" onclick="cycleStatus(' + idArg + ')" ' +
           'title="クリックでステータス変更" style="margin-top:2px;">' + meta.label + '</span>' +
         '<span style="flex:1;min-width:0;">' +
           '<div style="display:flex;align-items:center;flex-wrap:wrap;">' +
+            sourceBadge +
             clientHtml +
             '<span>' + esc(task.text) + '</span>' +
             dueHtml +
@@ -1955,10 +2031,10 @@
           subHtml +
         '</span>' +
         '<span style="display:flex;gap:4px;margin-left:8px;flex-shrink:0;margin-top:1px;">' +
-          '<button onclick="openTodoDetailFromCal(' + task.id + ')" ' +
+          '<button onclick="openTodoDetailFromCal(' + idArg + ')" ' +
             'style="background:none;border:1px solid #dde5dd;border-radius:6px;' +
             'cursor:pointer;font-size:0.78rem;color:#5a7a5e;padding:2px 8px;">編集</button>' +
-          '<button onclick="deleteTask(' + task.id + ')" ' +
+          '<button onclick="deleteTask(' + idArg + ')" ' +
             'style="background:none;border:1px solid #efcbcb;border-radius:6px;' +
             'cursor:pointer;font-size:0.78rem;color:#c62828;padding:2px 8px;">削除</button>' +
         '</span>';
@@ -1970,35 +2046,57 @@
     console.log('[cycleStatus] ★★★ 関数呼び出し確認 ID=' + id + ' ★★★');
     var tasks = loadTasks();
     var target = null;
-    tasks.forEach(function(t) { if (t.id === id) target = t; });
+    tasks.forEach(function(t) { if (String(t.id) === String(id)) target = t; });
     if (!target) return;
 
+    var isConsult = target.source === 'consultation';
     var idx = STATUS_ORDER.indexOf(target.status);
     var newStatus = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
 
-    // 完了になる場合：まずTODOシートに作業時間を同期してから記録シートへ保存
+    // ── 相談記録由来 ──
+    if (isConsult) {
+      if (newStatus === 'done') {
+        // 完了 → O列をFALSEに
+        completeConsultTodo(target.consultId).then(function(success) {
+          if (success) {
+            addActivity('consultation_updated', actText(target.client, '相談記録', 'を完了'));
+            return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
+          }
+        });
+      } else {
+        // ステータス変更 → 相談記録シート更新
+        var statusJp = STATUS_CODE_TO_JP[newStatus] || newStatus;
+        var assigneeName = ASSIGNEE_LABEL[target.assignee] || target.assignee || '';
+        fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'updateRow', sheet: '相談記録', updateKey: 'ID',
+            'ID': target.consultId, 'ステータス': statusJp, '担当者': assigneeName
+          })
+        }).then(function() {
+          var label = STATUS_META[newStatus] ? STATUS_META[newStatus].label : newStatus;
+          addActivity('consultation_updated', actText(target.client, '相談記録', 'を' + label + 'に変更'));
+          return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
+        });
+      }
+      return;
+    }
+
+    // ── 通常TODO ──
     if (newStatus === 'done') {
       console.log('[cycleStatus] 完了処理開始 ID=' + target.id + ', 業務種別=' + (target.category || '(なし)'));
-      console.log('[cycleStatus] ★作業時間: workStart=' + target.workStart + ', workEnd=' + target.workEnd + ', workMinutes=' + target.workMinutes);
       completeTodo(target.id, {
         workStart:   target.workStart   || '',
         workEnd:     target.workEnd     || '',
         workMinutes: target.workMinutes || ''
       }).then(function(success) {
         if (success) {
-          console.log('[cycleStatus] 保存成功 → 記録済フラグセット → TODO一覧から除外');
-          // ローカルキャッシュにも記録済を反映
           target.status = 'done';
           target.recorded = new Date().toISOString();
           saveTasks(loadTasks());
           addActivity('todo_status_changed', actText(target.client, target.text, ' を完了に変更'));
-          console.log('[cycleStatus] スプレッドから再取得開始');
-          return refreshFromSheet().then(function() {
-            console.log('[cycleStatus] 再取得完了 → UI更新');
-            refreshCalendarIfVisible();
-          });
-        } else {
-          console.log('[cycleStatus] 保存失敗 → TODOを消さない');
+          return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
         }
       });
     } else {
@@ -2080,8 +2178,16 @@
 
   function deleteTask(id) {
     if (!confirm('本当に削除しますか？')) return;
-    var task = loadTasks().filter(function(t) { return t.id === id; })[0];
-    saveTasks(loadTasks().filter(function(t) { return t.id !== id; }));
+    var task = loadTasks().filter(function(t) { return String(t.id) === String(id); })[0];
+    if (task && task.source === 'consultation') {
+      // 相談記録由来 → O列をFALSEに（TODO一覧から消す）
+      completeConsultTodo(task.consultId).then(function() {
+        addActivity('consultation_updated', actText(task.client, '相談記録', 'のTODOを削除'));
+        return refreshFromSheet();
+      });
+      return;
+    }
+    saveTasks(loadTasks().filter(function(t) { return String(t.id) !== String(id); }));
     renderTasks();
     updateAllStats();
     if (task) addActivity('todo_deleted', actText(task.client, task.text, ' を削除'));
@@ -2444,6 +2550,38 @@
     .catch(function(e) {
       console.error('[completeTodo] ===== 保存失敗 =====', e);
       alert('完了処理に失敗しました: ' + e.message + '\nタスクはTODOに残します。');
+      return false;
+    });
+  }
+
+  // 相談記録TODO完了（O列をFALSEに更新）
+  function completeConsultTodo(consultId) {
+    console.log('[completeConsultTodo] consultId=' + consultId);
+    var postData = {
+      action: 'completeConsultTodo',
+      consultId: consultId
+    };
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      console.log('[completeConsultTodo] レスポンス:', JSON.stringify(result));
+      if (!result || result.success !== true) {
+        console.error('[completeConsultTodo] 失敗:', result && result.error || '不明');
+        alert('相談記録の完了処理に失敗しました:\n' + (result && result.error || '不明'));
+        return false;
+      }
+      console.log('[completeConsultTodo] ✅ 行' + result.updatedRow + ' O列→FALSE, ステータス→完了');
+      // consultTodosCache から削除
+      consultTodosCache = consultTodosCache.filter(function(t) { return t.consultId !== consultId; });
+      return true;
+    })
+    .catch(function(e) {
+      console.error('[completeConsultTodo] エラー:', e);
+      alert('相談記録の完了処理に失敗しました: ' + e.message);
       return false;
     });
   }
@@ -3945,45 +4083,13 @@
     renderConsultList();
   }
 
-  // 相談記録とTODOの同期（保存・編集のたびに呼ぶ）
+  // 相談記録とTODOの同期
+  // ※ 相談記録由来TODOはスプレッドシートから直接取得する方式に変更済み
+  //    この関数は相談記録保存後にUIを更新するためだけに使用
   function syncConsultTodo(entry) {
-    var tasks = loadTasks();
-    // この相談記録に紐付いた既存タスクを削除
-    tasks = tasks.filter(function(t) { return t.consultId !== entry.id; });
-
-    // TODOに出す条件: 要対応フラグ=TRUE かつ ステータスが完了でない
-    var statusLabel = CONSULT_STATUS[entry.status] ? CONSULT_STATUS[entry.status].label : entry.status;
-    var needTodo = entry.todoFlag && statusLabel !== '完了';
-    if (!needTodo) {
-      saveTasks(tasks);
-      updateAllStats();
-      return;
-    }
-
-    // entry.client はクライアント名（selectのvalue=c.name）
-    var clientName = entry.client || '';
-    var summary = entry.content ? entry.content.replace(/\n/g, ' ').slice(0, 20) : '';
-    var title = (clientName ? clientName + '：' : '') + summary + (entry.content && entry.content.length > 20 ? '…' : '');
-
-    // 相談ステータス → タスクステータスの対応
-    var taskStatus = (entry.status === '確認待ち' || entry.status === 'waiting') ? 'waiting'
-                   : (entry.status === '対応中'   || entry.status === 'inprogress') ? 'inprogress'
-                   : 'todo';
-
-    var maxId = tasks.reduce(function(m, t) { return Math.max(m, t.id || 0); }, 0);
-    tasks.push({
-      id:         maxId + 1,
-      consultId:  entry.id,          // 相談記録との紐付け
-      client:     clientName,
-      text:       title || '相談対応',
-      category:   '相談記録',
-      assignee:   entry.assignee || '',
-      due:        entry.due || '',
-      status:     taskStatus,
-      recordDate: entry.datetime ? entry.datetime.split('T')[0] : '',
-      memo:       '相談記録より自動登録'
-    });
-    saveTasks(tasks);
+    // 相談記録由来TODOはfetchConsultTodosFromSheetで取得するため
+    // ローカルのtasksCacheに重複登録しない
+    // 保存後にrefreshFromSheetが呼ばれるのでここではUI更新のみ
     updateAllStats();
   }
 
@@ -4163,7 +4269,8 @@
         var color = CAL_EVENT_COLORS[ev.type] || '#78909c';
         if (ev.taskId !== undefined) {
           // TODO由来：クリックで詳細モーダルを開く
-          evHtml += '<div class="cal-event cal-event-todo" style="background:' + color + ';" title="' + esc(ev.text) + '" onclick="openTodoDetailFromCal(' + ev.taskId + ')">' + esc(ev.text) + '</div>';
+          var calIdArg = typeof ev.taskId === 'string' ? "'" + ev.taskId + "'" : ev.taskId;
+          evHtml += '<div class="cal-event cal-event-todo" style="background:' + color + ';" title="' + esc(ev.text) + '" onclick="openTodoDetailFromCal(' + calIdArg + ')">' + esc(ev.text) + '</div>';
         } else {
           evHtml += '<div class="cal-event" style="background:' + color + ';" title="' + esc(ev.text) + '">' + esc(ev.text) + '</div>';
         }
@@ -4197,16 +4304,28 @@
 
   // ===== TODOモーダル =====
   function openTodoDetailFromCal(id) {
-    var task = loadTasks().filter(function(t) { return t.id === id; })[0];
+    var task = loadTasks().filter(function(t) { return String(t.id) === String(id); })[0];
     if (!task) return;
     document.getElementById('todo-modal-id').value        = task.id;
     document.getElementById('todo-modal-client').value    = task.client   || '';
-    document.getElementById('todo-modal-text').value      = task.text     || '';
     document.getElementById('todo-modal-category').value  = task.category || '';
     document.getElementById('todo-modal-assignee').value  = task.assignee || '';
     document.getElementById('todo-modal-status').value    = task.status   || 'todo';
     document.getElementById('todo-modal-due').value       = task.due      || '';
     document.getElementById('todo-modal-memo').value      = task.memo     || '';
+
+    // 相談記録由来の場合: テキスト欄に相談内容を表示
+    if (task.source === 'consultation') {
+      document.getElementById('todo-modal-text').value = task.consultContent || task.text || '';
+      // モーダルタイトルを変更
+      var titleEl = document.querySelector('#todo-detail-modal .modal-title');
+      if (titleEl) titleEl.textContent = '相談記録 TODO 詳細・編集';
+    } else {
+      document.getElementById('todo-modal-text').value = task.text || '';
+      var titleEl2 = document.querySelector('#todo-detail-modal .modal-title');
+      if (titleEl2) titleEl2.textContent = 'TODO 詳細・編集';
+    }
+
     // 作業時間
     var workMins = task.workMinutes || 0;
     document.getElementById('todo-modal-work-start').value   = task.workStart || '';
@@ -4222,14 +4341,10 @@
 
   function saveTodoDetailModal() {
     console.log('[saveTodoDetailModal] ★★★ 関数呼び出し確認 ★★★');
-    console.log('[saveTodoDetailModal] ★input生値: work-start=' + document.getElementById('todo-modal-work-start').value
-      + ', work-end=' + document.getElementById('todo-modal-work-end').value
-      + ', work-minutes=' + document.getElementById('todo-modal-work-minutes').value);
-    var idVal = parseInt(document.getElementById('todo-modal-id').value, 10);
-    if (!idVal) return;
+    var idVal = document.getElementById('todo-modal-id').value;
     var tasks = loadTasks();
     var target = null;
-    tasks.forEach(function(t) { if (t.id === idVal) target = t; });
+    tasks.forEach(function(t) { if (String(t.id) === String(idVal)) target = t; });
     if (!target) return;
 
     var oldStatus = target.status;
@@ -4245,37 +4360,84 @@
       workMinutes: parseInt(document.getElementById('todo-modal-work-minutes').value || '0', 10) || 0
     };
     var newStatus = editData.status;
+    var isConsult = target.source === 'consultation';
 
-    // ★デバッグ: モーダル入力値の確認
-    console.log('[saveTodoDetailModal] ★editData全体:', JSON.stringify(editData));
-    console.log('[saveTodoDetailModal] ★workStart=' + editData.workStart + ', workEnd=' + editData.workEnd + ', workMinutes=' + editData.workMinutes);
-    console.log('[saveTodoDetailModal] ★oldStatus=' + oldStatus + ', newStatus=' + newStatus);
+    console.log('[saveTodoDetailModal] source=' + (target.source || 'todo') + ', oldStatus=' + oldStatus + ', newStatus=' + newStatus);
 
     closeTodoDetailModal();
 
+    // ── 相談記録由来のTODO ──
+    if (isConsult) {
+      if (newStatus === 'done') {
+        // 相談記録TODO完了 → O列をFALSEに
+        console.log('[saveTodoDetailModal] 相談記録TODO完了: consultId=' + target.consultId);
+        completeConsultTodo(target.consultId).then(function(success) {
+          if (success) {
+            addActivity('consultation_updated', actText(target.client, '相談記録', 'を完了'));
+            return refreshFromSheet().then(function() { renderCalendar(); });
+          } else {
+            renderTasks();
+          }
+        });
+      } else {
+        // 相談記録TODO編集 → 相談記録シートを更新
+        var assigneeName = ASSIGNEE_LABEL[editData.assignee] || editData.assignee || '';
+        var statusJp = STATUS_CODE_TO_JP[editData.status] || editData.status;
+        var updateData = {
+          action: 'updateRow',
+          sheet: '相談記録',
+          updateKey: 'ID',
+          'ID': target.consultId,
+          'クライアント名': editData.client,
+          '相談区分': target.consultCategory || '',
+          '相談内容': editData.text,
+          '担当者': assigneeName,
+          'ステータス': statusJp,
+          '期限': editData.due,
+          '備考': editData.memo,
+          '開始時刻': editData.workStart,
+          '終了時刻': editData.workEnd,
+          '作業時間': editData.workMinutes || ''
+        };
+        console.log('[saveTodoDetailModal] 相談記録更新:', JSON.stringify(updateData));
+        fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(updateData)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(result) {
+          console.log('[saveTodoDetailModal] 相談記録更新結果:', JSON.stringify(result));
+          addActivity('consultation_updated', actText(editData.client, '相談記録', 'を更新'));
+          return refreshFromSheet().then(function() { renderCalendar(); });
+        })
+        .catch(function(e) {
+          console.error('[saveTodoDetailModal] 相談記録更新エラー:', e);
+          renderTasks();
+        });
+      }
+      return;
+    }
+
+    // ── 通常TODO ──
     // 完了になる場合：記録シートへ保存成功後にUI更新
     if (newStatus === 'done' && oldStatus !== 'done') {
       console.log('[saveTodoDetailModal] 完了処理開始 ID=' + target.id + ', 業務種別=' + (target.category || '(なし)'));
-      // フィールド変更をローカルに反映（完了以外）
       Object.assign(target, editData, { status: oldStatus });
       saveTasks(tasks);
-      // 完了時入力の作業時間をcompleteTodoへ直接渡す（GAS側で記録シートへ書き込み）
       var workTimeArg = {
         workStart:   editData.workStart,
         workEnd:     editData.workEnd,
         workMinutes: editData.workMinutes
       };
-      console.log('[saveTodoDetailModal] ★completeTodoへ渡すworkTimeArg:', JSON.stringify(workTimeArg));
       completeTodo(target.id, workTimeArg).then(function(success) {
         if (success) {
-          console.log('[saveTodoDetailModal] 保存成功 → 記録済フラグセット → TODO一覧から除外');
           target.status = 'done';
           target.recorded = new Date().toISOString();
           saveTasks(loadTasks());
           addActivity('todo_updated', actText(editData.client || target.client, editData.text || target.text, ' を更新（完了）'));
           return refreshFromSheet().then(function() { renderCalendar(); });
         } else {
-          console.log('[saveTodoDetailModal] 保存失敗 → TODOを消さない');
           renderTasks();
         }
       });
@@ -4831,6 +4993,7 @@
   // ※ タスクの描画とカード統計はfetchTasksFromSheet内で即座に実行される
   Promise.all([
     fetchTasksFromSheet(),
+    fetchConsultTodosFromSheet(),
     fetchRecordsFromSheet(),
     fetchPayrollRecordsFromSheet(),
     fetchClientsFromSheet(),
