@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v22 (TODOメモ保存修正)');
+  console.log('[app] コードバージョン: 2026-03-10-v23 (TODO編集保存ログ追加)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -4855,7 +4855,13 @@
       updateAllStats();
       renderCalendar();
       addActivity('todo_updated', actText(target.client, target.text, ' を更新'));
-      syncTaskToSheet(target);
+      console.log('[TODO編集保存] syncTaskToSheet呼び出し target=', JSON.stringify({
+        id: target.id, client: target.client, text: target.text,
+        status: target.status, memo: target.memo, workMinutes: target.workMinutes
+      }));
+      syncTaskToSheet(target).then(function(ok) {
+        console.log('[TODO編集保存] syncTaskToSheet結果:', ok);
+      });
     }
   }
 
