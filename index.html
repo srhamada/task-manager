@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v20 (サマリー表示調整)');
+  console.log('[app] コードバージョン: 2026-03-10-v21 (テストデータ除外)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2732,6 +2732,15 @@
     return PAYROLL_CATEGORIES.indexOf(cat) !== -1;
   }
 
+  // テストデータ除外（クライアント名に「テスト」を含むレコードを除外）
+  function isTestData(t) {
+    var client = t.client || t.clientName || '';
+    return client.indexOf('テスト') !== -1;
+  }
+  function excludeTestData(arr) {
+    return arr.filter(function(t) { return !isTestData(t); });
+  }
+
   // ===== TODOシートをGAS経由で更新 =====
 
   // 完了以外のステータス変更・編集をGASに送信（既存行を更新、appendRowしない）
@@ -2906,7 +2915,7 @@
           else throw new Error('記録データの形式が不正です');
         }
         console.log('[fetchRecordsFromSheet] 取得件数:', rows.length);
-        recordsCache = rows.map(function(row) {
+        recordsCache = excludeTestData(rows.map(function(row) {
           var completedAt = row['完了日時'] || '';
           // recordDate: renderArchiveTable が参照するフィールド
           var recordDate = completedAt ? normalizeDate(completedAt) : '';
@@ -2929,7 +2938,7 @@
             sourceSheet: row['元シート'] || '',
             sourceRow:   row['元行番号'] || ''
           };
-        });
+        }));
         return recordsCache;
       })
       .catch(function(e) {
@@ -2960,7 +2969,7 @@
           else throw new Error('給与計算記録データの形式が不正です');
         }
         console.log('[fetchPayrollRecordsFromSheet] 取得件数:', rows.length);
-        payrollRecordsCache = rows.map(function(row) {
+        payrollRecordsCache = excludeTestData(rows.map(function(row) {
           var completedAt = row['完了日'] || '';
           var recordDate = completedAt ? normalizeDate(completedAt) : '';
           return {
@@ -2980,7 +2989,7 @@
             headcount:    row['人数'] || '',
             memo:         row['メモ'] || ''
           };
-        });
+        }));
         return payrollRecordsCache;
       })
       .catch(function(e) {
@@ -4162,8 +4171,10 @@
   };
 
   function loadConsultations() {
-    try { return JSON.parse(localStorage.getItem(CONSULT_KEY) || '[]'); }
-    catch(e) { return []; }
+    try {
+      var all = JSON.parse(localStorage.getItem(CONSULT_KEY) || '[]');
+      return all.filter(function(r) { return !isTestData(r); });
+    } catch(e) { return []; }
   }
 
   function saveConsultations(data) {
