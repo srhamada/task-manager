@@ -390,6 +390,24 @@ function handleUpdateRow_(ss, data) {
   var allData = sheet.getDataRange().getValues();
   var headers = allData[0];
 
+  // ★デバッグ: ヘッダー一覧と受信キーを比較
+  Logger.log('[updateRow] ★SpreadsheetID=' + ss.getId());
+  Logger.log('[updateRow] ★シート名=' + sheetName + ', ヘッダー数=' + headers.length);
+  Logger.log('[updateRow] ★ヘッダー一覧=' + JSON.stringify(headers));
+  Logger.log('[updateRow] ★受信データキー=' + JSON.stringify(Object.keys(data)));
+  // ★ヘッダーにメモがあるか、受信データにメモがあるか
+  var memoColIdx = headers.indexOf('メモ');
+  Logger.log('[updateRow] ★「メモ」列index=' + memoColIdx + ', data["メモ"]=' + (data['メモ'] !== undefined ? '"' + data['メモ'] + '"' : 'undefined'));
+  // ★ヘッダー各文字のcharCode（見えない空白検出）
+  for (var hi = 0; hi < headers.length; hi++) {
+    var h = String(headers[hi]);
+    if (h.indexOf('メモ') !== -1 || h.indexOf('memo') !== -1 || h === '') {
+      var codes = [];
+      for (var ci = 0; ci < h.length; ci++) codes.push(h.charCodeAt(ci));
+      Logger.log('[updateRow] ★ヘッダー[' + hi + ']="' + h + '" charCodes=' + JSON.stringify(codes));
+    }
+  }
+
   // 検索キー列の指定（デフォルトは 'ID'）
   var keyCol = data.updateKey || 'ID';
   var idCol = headers.indexOf(keyCol);
@@ -402,6 +420,10 @@ function handleUpdateRow_(ss, data) {
     if (String(allData[i][idCol]) === targetId) {
       var rowNum = i + 1;
       Logger.log('[updateRow] ID=' + targetId + ' → 行' + rowNum);
+
+      // ★更新前の行データ
+      var beforeValues = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
+      Logger.log('[updateRow] ★更新前行データ=' + JSON.stringify(beforeValues));
 
       // 送信されたフィールドをヘッダーに基づいて更新
       for (var j = 0; j < headers.length; j++) {
@@ -417,8 +439,16 @@ function handleUpdateRow_(ss, data) {
         }
         if (data[colName] !== undefined) {
           sheet.getRange(rowNum, j + 1).setValue(data[colName]);
+          // ★メモ列の書き込みログ
+          if (colName === 'メモ' || colName.indexOf('メモ') !== -1) {
+            Logger.log('[updateRow] ★メモ列書き込み: 列' + (j+1) + ', 値="' + data[colName] + '"');
+          }
         }
       }
+
+      // ★更新後の行データ
+      var afterValues = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
+      Logger.log('[updateRow] ★更新後行データ=' + JSON.stringify(afterValues));
 
       Logger.log('[updateRow] 行' + rowNum + ' の更新完了');
       return jsonResponse_({ success: true, updatedRow: rowNum });
