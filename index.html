@@ -745,6 +745,22 @@
         </div>
         <ul id="todo-list" class="todo-list"></ul>
       </div>
+      <!-- 一言メッセージ -->
+      <div class="card" id="quick-msg-card">
+        <div class="section-title">💬 一言メッセージ</div>
+        <div style="display:flex;gap:4px;margin-bottom:10px;align-items:center;">
+          <select id="msg-to" style="font-size:0.76rem;padding:4px 6px;border:1px solid #ccc;border-radius:4px;flex-shrink:0;">
+            <option value="濱田">→ 濱田</option>
+            <option value="髙嵜">→ 髙嵜</option>
+          </select>
+          <input id="msg-text" type="text" class="form-input" placeholder="一言メッセージを入力…"
+            style="flex:1;padding:5px 8px;font-size:0.8rem;" onkeydown="if(event.key==='Enter')sendQuickMsg()" />
+          <button onclick="sendQuickMsg()" class="btn btn-primary" style="padding:4px 10px;font-size:0.76rem;white-space:nowrap;flex-shrink:0;">送信</button>
+        </div>
+        <div id="msg-list" style="font-size:0.82rem;">
+          <div style="padding:8px 0;color:#9e9e9e;text-align:center;">メッセージはありません</div>
+        </div>
+      </div>
       <div class="card">
         <div class="section-title">最近のアクティビティ</div>
         <ul id="activity-list" class="activity-list">
@@ -1748,7 +1764,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v33 (担当者状態UI横並び)');
+  console.log('[app] コードバージョン: 2026-03-10-v34 (一言メッセージ)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2203,7 +2219,8 @@
       fetchInquiriesFromSheet(),
       fetchActivityLog(),
       fetchHolidayMaster(),
-      fetchMemberStatuses()
+      fetchMemberStatuses(),
+      fetchQuickMessages()
     ]).then(function() {
       renderTasks();
       updateAllStats();
@@ -2361,6 +2378,92 @@
       body: JSON.stringify({ action: 'setMemberStatus', name: myName, status: statusCode })
     }).catch(function(e) {
       console.error('[setMemberStatus] 失敗:', e);
+    });
+  }
+
+  // --- 一言メッセージ ---
+  var quickMsgCache = [];
+
+  function fetchQuickMessages() {
+    return fetch(GAS_URL + '?action=getMessages')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        quickMsgCache = Array.isArray(data) ? data : [];
+        renderQuickMessages();
+        return quickMsgCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchQuickMessages] 失敗:', e);
+      });
+  }
+
+  function renderQuickMessages() {
+    var el = document.getElementById('msg-list');
+    if (!el) return;
+    if (!quickMsgCache.length) {
+      el.innerHTML = '<div style="padding:8px 0;color:#9e9e9e;text-align:center;">メッセージはありません</div>';
+      return;
+    }
+    var myId = localStorage.getItem('myMemberId') || 'hamada';
+    var myName = '';
+    MEMBER_LIST.forEach(function(m) { if (m.id === myId) myName = m.name; });
+
+    var html = '';
+    quickMsgCache.forEach(function(msg) {
+      var isToMe = msg.to === myName;
+      var isMine = msg.from === myName;
+      var bg = isToMe ? '#FFF8E1' : '#fff';
+      var delBtn = isMine ? ' <span style="cursor:pointer;color:#bbb;font-size:0.7rem;margin-left:4px;" title="削除" onclick="deleteQuickMsg(' + msg.id + ')">×</span>' : '';
+      html += '<div style="padding:6px 8px;border-bottom:1px solid #f0f0f0;background:' + bg + ';border-radius:3px;margin-bottom:2px;">';
+      html += '<div style="font-size:0.7rem;color:#999;">' + esc(msg.from) + ' → ' + esc(msg.to) + '　' + (msg.ts || '') + delBtn + '</div>';
+      html += '<div style="margin-top:2px;">' + esc(msg.text) + '</div>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function sendQuickMsg() {
+    var textEl = document.getElementById('msg-text');
+    var toEl = document.getElementById('msg-to');
+    var text = (textEl.value || '').trim();
+    if (!text) return;
+
+    var myId = localStorage.getItem('myMemberId') || 'hamada';
+    var myName = '';
+    MEMBER_LIST.forEach(function(m) { if (m.id === myId) myName = m.name; });
+    if (!myName) return;
+
+    var to = toEl.value;
+    textEl.value = '';
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'postMessage', text: text, from: myName, to: to })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success && data.message) {
+        quickMsgCache.unshift(data.message);
+        if (quickMsgCache.length > 5) quickMsgCache = quickMsgCache.slice(0, 5);
+        renderQuickMessages();
+      }
+    })
+    .catch(function(e) {
+      console.error('[sendQuickMsg] 失敗:', e);
+    });
+  }
+
+  function deleteQuickMsg(id) {
+    quickMsgCache = quickMsgCache.filter(function(m) { return m.id !== id; });
+    renderQuickMessages();
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteMessage', id: id })
+    }).catch(function(e) {
+      console.error('[deleteQuickMsg] 失敗:', e);
     });
   }
 
@@ -5917,6 +6020,15 @@
     try { updateInquiryStat(); } catch(e) { console.error('[初期化] updateInquiryStat エラー:', e); }
     try { renderTimeSummary(); } catch(e) { console.error('[初期化] renderTimeSummary エラー:', e); }
     try { renderActivityList(); } catch(e) { console.error('[初期化] renderActivityList エラー:', e); }
+    // 一言メッセージ: 宛先を自分以外にデフォルト設定
+    try {
+      var myId = localStorage.getItem('myMemberId') || 'hamada';
+      var toEl = document.getElementById('msg-to');
+      if (toEl) {
+        var defaultTo = myId === 'hamada' ? '髙嵜' : '濱田';
+        toEl.value = defaultTo;
+      }
+    } catch(e) {}
   }).catch(function(e) {
     console.error('[初期化] データ取得でエラー:', e);
   });
