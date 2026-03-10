@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v25 (アクティビティログ共有化)');
+  console.log('[app] コードバージョン: 2026-03-10-v26 (ステータスクリック無効化)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2353,8 +2353,8 @@
 
       li.innerHTML =
         assigneeDot +
-        '<span class="todo-badge ' + meta.cls + '" onclick="cycleStatus(' + idArg + ')" ' +
-          'title="クリックでステータス変更" style="margin-top:2px;">' + meta.label + '</span>' +
+        '<span class="todo-badge ' + meta.cls + '" ' +
+          'style="margin-top:2px;cursor:default;">' + meta.label + '</span>' +
         '<span style="flex:1;min-width:0;">' +
           '<div style="display:flex;align-items:center;flex-wrap:wrap;">' +
             sourceBadge +
