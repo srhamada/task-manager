@@ -43,6 +43,11 @@ function doGet(e) {
     return handleGetHolidayMaster_();
   }
 
+  // ── 担当者状態取得 ──
+  if (action === 'getMemberStatuses') {
+    return handleGetMemberStatuses_();
+  }
+
   var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
@@ -134,6 +139,11 @@ function doPost(e) {
     // ── 相談記録TODO完了（O列をFALSEに） ──
     if (data.action === 'completeConsultTodo') {
       return handleCompleteConsultTodo_(ss, data);
+    }
+
+    // ── 担当者状態更新 ──
+    if (data.action === 'setMemberStatus') {
+      return handleSetMemberStatus_(data);
     }
 
     // ── 算定年更管理 一括保存 ──
@@ -660,6 +670,33 @@ function handleSaveBusySeasonRecords_(ss, data) {
 
   Logger.log('[saveBusySeason] 保存完了: 全' + (allRows.length - 1) + '行（今回' + newRows.length + '行）');
   return jsonResponse_({ success: true, savedCount: newRows.length, totalCount: allRows.length - 1 });
+}
+
+// --------------- 担当者状態（一時保存） ---------------
+
+var VALID_MEMBER_STATUSES = ['normal', 'phone', 'toilet', 'smoke', 'clean', 'meal'];
+
+function handleGetMemberStatuses_() {
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get('memberStatuses');
+  var statuses = raw ? JSON.parse(raw) : {};
+  return jsonResponse_(statuses);
+}
+
+function handleSetMemberStatus_(data) {
+  var name = data.name || '';
+  var status = data.status || 'normal';
+  if (VALID_MEMBER_STATUSES.indexOf(status) === -1) status = 'normal';
+  if (!name) return jsonResponse_({ success: false, error: 'name is required' });
+
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get('memberStatuses');
+  var statuses = raw ? JSON.parse(raw) : {};
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  statuses[name] = { status: status, updatedAt: nowJST };
+  // CacheService最大6時間（21600秒）
+  cache.put('memberStatuses', JSON.stringify(statuses), 21600);
+  return jsonResponse_({ success: true, name: name, status: status, updatedAt: nowJST });
 }
 
 // --------------- ユーティリティ ---------------

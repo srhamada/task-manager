@@ -700,10 +700,18 @@
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
           <div class="section-title" style="margin-bottom:0;">今週のTODO</div>
-          <div style="display:flex;gap:5px;">
+          <div style="display:flex;gap:5px;align-items:flex-start;">
             <button id="filter-btn-all"      onclick="setFilter('')"           class="btn btn-primary"   style="padding:4px 12px;font-size:0.78rem;">すべて</button>
-            <button id="filter-btn-hamada"   onclick="setFilter('hamada')"   class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;">濱田</button>
-            <button id="filter-btn-takasaki" onclick="setFilter('takasaki')" class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;">髙嵜</button>
+            <button id="filter-btn-hamada"   onclick="setFilter('hamada')"   class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;display:flex;flex-direction:column;align-items:center;line-height:1.3;">濱田<span id="member-status-hamada" style="font-size:0.7rem;" title="在席">🟢</span></button>
+            <button id="filter-btn-takasaki" onclick="setFilter('takasaki')" class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;display:flex;flex-direction:column;align-items:center;line-height:1.3;">髙嵜<span id="member-status-takasaki" style="font-size:0.7rem;" title="在席">🟢</span></button>
+            <select id="my-status-select" onchange="onMyStatusChange(this.value)" style="font-size:0.72rem;padding:2px 4px;border:1px solid #ccc;border-radius:4px;margin-left:4px;">
+              <option value="normal">🟢 在席</option>
+              <option value="phone">☎️ 電話</option>
+              <option value="toilet">🚻 トイレ</option>
+              <option value="smoke">🚬 タバコ</option>
+              <option value="clean">🧹 掃除</option>
+              <option value="meal">🍚 ご飯</option>
+            </select>
           </div>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;">
@@ -1740,7 +1748,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v31 (給与支給日営業日補正)');
+  console.log('[app] コードバージョン: 2026-03-10-v32 (担当者状態表示)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1964,6 +1972,22 @@
     '髙嵜': 'takasaki',
     '高嵜': 'takasaki'
   };
+  // --- 担当者状態表示 ---
+  var MEMBER_STATUS_MASTER = {
+    normal: { emoji: '🟢', label: '在席' },
+    phone:  { emoji: '☎️', label: '電話' },
+    toilet: { emoji: '🚻', label: 'トイレ' },
+    smoke:  { emoji: '🚬', label: 'タバコ' },
+    clean:  { emoji: '🧹', label: '掃除' },
+    meal:   { emoji: '🍚', label: 'ご飯' }
+  };
+  var memberStatusCache = {}; // { '濱田': 'normal', '髙嵜': 'phone', ... }
+  // 担当者IDと表示名のリスト（フィルタボタン用）
+  var MEMBER_LIST = [
+    { id: 'hamada', name: '濱田' },
+    { id: 'takasaki', name: '髙嵜' }
+  ];
+
   var TASK_TYPES = [
     '給与計算', '賞与計算', '給与修正・再計算', '会計入力',
     '入社手続', '退職手続', '雇用保険', '社会保険',
@@ -2178,7 +2202,8 @@
       fetchClientsFromSheet(),
       fetchInquiriesFromSheet(),
       fetchActivityLog(),
-      fetchHolidayMaster()
+      fetchHolidayMaster(),
+      fetchMemberStatuses()
     ]).then(function() {
       renderTasks();
       updateAllStats();
@@ -2287,6 +2312,56 @@
     currentFilter = name;
     updateFilterButtons();
     renderTasks();
+  }
+
+  // --- 担当者状態の取得・更新・描画 ---
+  function fetchMemberStatuses() {
+    return fetch(GAS_URL + '?action=getMemberStatuses')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data && typeof data === 'object') {
+          memberStatusCache = {};
+          MEMBER_LIST.forEach(function(m) {
+            var entry = data[m.name];
+            memberStatusCache[m.id] = (entry && entry.status) || 'normal';
+          });
+        }
+        renderMemberStatuses();
+        return memberStatusCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchMemberStatuses] 失敗:', e);
+      });
+  }
+
+  function renderMemberStatuses() {
+    MEMBER_LIST.forEach(function(m) {
+      var el = document.getElementById('member-status-' + m.id);
+      if (!el) return;
+      var statusCode = memberStatusCache[m.id] || 'normal';
+      var meta = MEMBER_STATUS_MASTER[statusCode] || MEMBER_STATUS_MASTER.normal;
+      el.textContent = meta.emoji;
+      el.title = meta.label;
+    });
+  }
+
+  function onMyStatusChange(statusCode) {
+    // 自分の担当者名（暫定固定: ログイン概念なし）
+    var myId = localStorage.getItem('myMemberId') || 'hamada';
+    var myName = '';
+    MEMBER_LIST.forEach(function(m) { if (m.id === myId) myName = m.name; });
+    if (!myName) return;
+
+    memberStatusCache[myId] = statusCode;
+    renderMemberStatuses();
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setMemberStatus', name: myName, status: statusCode })
+    }).catch(function(e) {
+      console.error('[setMemberStatus] 失敗:', e);
+    });
   }
 
   function renderTasks() {
@@ -5825,7 +5900,8 @@
     fetchClientsFromSheet(),
     fetchInquiriesFromSheet(),
     fetchActivityLog(),
-    fetchHolidayMaster()
+    fetchHolidayMaster(),
+    fetchMemberStatuses()
   ]).then(function() {
     console.log('[初期化] Promise.all 完了（全シート取得済み）');
     console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');
