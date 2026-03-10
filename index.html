@@ -1740,7 +1740,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v30 (カレンダーイベント表示順)');
+  console.log('[app] コードバージョン: 2026-03-10-v31 (給与支給日営業日補正)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -4601,6 +4601,42 @@
   var calMonth = new Date().getMonth(); // 0-indexed
   var holidayMasterCache = []; // 休日マスタキャッシュ
 
+  // --- 営業日判定ユーティリティ ---
+  // dateStr: 'yyyy-MM-dd' 形式
+  function isNonBusinessDay(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    var dow = d.getDay();
+    if (dow === 0 || dow === 6) return true; // 土日
+    for (var i = 0; i < holidayMasterCache.length; i++) {
+      if (holidayMasterCache[i].date === dateStr) return true; // 祝日・事務所休日
+    }
+    return false;
+  }
+
+  function formatDateStr(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function getPreviousBusinessDay(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    for (var i = 0; i < 30; i++) { // 最大30日遡る（安全弁）
+      d.setDate(d.getDate() - 1);
+      var s = formatDateStr(d);
+      if (!isNonBusinessDay(s)) return s;
+    }
+    return dateStr; // フォールバック
+  }
+
+  function getNextBusinessDay(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    for (var i = 0; i < 30; i++) {
+      d.setDate(d.getDate() + 1);
+      var s = formatDateStr(d);
+      if (!isNonBusinessDay(s)) return s;
+    }
+    return dateStr;
+  }
+
   var CAL_EVENT_COLORS = {
     // TODO緊急度別（期限日と今日の関係で決定）
     todo_overdue:  '#e53935',  // 赤：期限超過
@@ -4679,13 +4715,19 @@
       }
     });
 
-    // ④ クライアントの給与支給日（契約中のみ）
+    // ④ クライアントの給与支給日（契約中のみ・休業日は前営業日に補正）
     loadClients().forEach(function(c) {
       if (c.status === 'active' && c.payrollPayDay) {
         var day = parseInt(c.payrollPayDay, 10);
         if (day >= 1 && day <= daysInMonth) {
-          var d = String(day).padStart(2, '0');
-          events.push({ date: year + '-' + mm + '-' + d, text: c.name + ' 給与支給日', type: 'payroll' });
+          var originalDate = year + '-' + mm + '-' + String(day).padStart(2, '0');
+          var displayDate = originalDate;
+          var suffix = '';
+          if (isNonBusinessDay(originalDate)) {
+            displayDate = getPreviousBusinessDay(originalDate);
+            suffix = '（営業日補正）';
+          }
+          events.push({ date: displayDate, text: c.name + ' 給与支給日' + suffix, type: 'payroll' });
         }
       }
     });
