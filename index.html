@@ -1113,11 +1113,23 @@
       <p>完了した給与計算・賞与計算の履歴です</p>
     </div>
     <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;">
-        <div class="search-bar" style="flex:1;margin-bottom:0;">
-          <input id="payroll-record-search" type="text" placeholder="クライアント名・タイトルで検索…" oninput="renderPayrollRecord()" />
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+        <div class="search-bar" style="flex:1;margin-bottom:0;min-width:180px;">
+          <input id="payroll-record-search" type="text" placeholder="フリーワード検索…" oninput="renderPayrollRecord()" />
         </div>
         <button class="btn btn-secondary" style="font-size:0.82rem;padding:5px 14px;white-space:nowrap;" onclick="exportClientCSV('payroll')">クライアント別CSV</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <select id="payroll-filter-client" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">クライアント：すべて</option>
+        </select>
+        <select id="payroll-filter-category" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">カテゴリ：すべて</option>
+        </select>
+        <select id="payroll-filter-assignee" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">担当者：すべて</option>
+        </select>
+        <button class="btn btn-secondary" style="font-size:0.78rem;padding:3px 10px;" onclick="resetListFilters('payroll')">リセット</button>
       </div>
       <div class="client-table-wrap">
         <table>
@@ -1148,11 +1160,23 @@
       <p>対応済みの業務履歴です（給与計算を除く）</p>
     </div>
     <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;">
-        <div class="search-bar" style="flex:1;margin-bottom:0;">
-          <input id="done-search" type="text" placeholder="クライアント名・タイトルで検索…" oninput="renderDoneList()" />
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+        <div class="search-bar" style="flex:1;margin-bottom:0;min-width:180px;">
+          <input id="done-search" type="text" placeholder="フリーワード検索…" oninput="renderDoneList()" />
         </div>
         <button class="btn btn-secondary" style="font-size:0.82rem;padding:5px 14px;white-space:nowrap;" onclick="exportClientCSV('done')">クライアント別CSV</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <select id="done-filter-client" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">クライアント：すべて</option>
+        </select>
+        <select id="done-filter-category" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">カテゴリ：すべて</option>
+        </select>
+        <select id="done-filter-assignee" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">担当者：すべて</option>
+        </select>
+        <button class="btn btn-secondary" style="font-size:0.78rem;padding:3px 10px;" onclick="resetListFilters('done')">リセット</button>
       </div>
       <div class="client-table-wrap">
         <table>
@@ -2953,6 +2977,69 @@
 
   // ===== 給与計算記録 / 完了一覧 レンダー =====
 
+  // ===== 完了一覧・給与計算記録 共通フィルタ =====
+
+  // プルダウンの選択肢をデータから自動生成
+  function buildFilterOptions(selectId, items, keyFn, labelFn) {
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    var currentVal = sel.value;
+    var defaultText = sel.options[0] ? sel.options[0].text : '';
+    var seen = {};
+    var opts = [];
+    items.forEach(function(item) {
+      var val = keyFn(item);
+      if (!val || seen[val]) return;
+      seen[val] = true;
+      opts.push({ value: val, label: labelFn ? labelFn(item) : val });
+    });
+    opts.sort(function(a, b) { return a.label < b.label ? -1 : a.label > b.label ? 1 : 0; });
+    sel.innerHTML = '<option value="">' + defaultText + '</option>';
+    opts.forEach(function(o) {
+      var option = document.createElement('option');
+      option.value = o.value;
+      option.textContent = o.label;
+      if (o.value === currentVal) option.selected = true;
+      sel.appendChild(option);
+    });
+  }
+
+  // フリーワード + プルダウンのAND絞り込み
+  function applyListFilters(items, searchVal, prefix) {
+    var q = (searchVal || '').toLowerCase().trim();
+    var clientVal   = (document.getElementById(prefix + '-filter-client')   || {}).value || '';
+    var categoryVal = (document.getElementById(prefix + '-filter-category') || {}).value || '';
+    var assigneeVal = (document.getElementById(prefix + '-filter-assignee') || {}).value || '';
+
+    return items.filter(function(t) {
+      if (clientVal && (t.client || '') !== clientVal) return false;
+      if (categoryVal && (t.category || '') !== categoryVal) return false;
+      if (assigneeVal && (t.assignee || '') !== assigneeVal) return false;
+      if (q) {
+        var haystack = ((t.client || '') + ' ' + (t.text || '') + ' ' + (t.category || '')).toLowerCase();
+        if (haystack.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  // リセットボタン
+  function resetListFilters(prefix) {
+    var ids = [prefix + '-filter-client', prefix + '-filter-category', prefix + '-filter-assignee'];
+    ids.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    var search = document.getElementById(prefix === 'done' ? 'done-search' : prefix === 'payroll' ? 'payroll-record-search' : '');
+    if (search) search.value = '';
+    if (prefix === 'done') renderDoneList();
+    else if (prefix === 'payroll') renderPayrollRecord();
+  }
+
+  // フィルタ後データを保持（CSV出力用）
+  var filteredDoneData = null;
+  var filteredPayrollData = null;
+
   // アーカイブリストの共通レンダー
   function renderArchiveTable(tbodyId, emptyId, tasks, searchVal) {
     var q = (searchVal || '').toLowerCase().trim();
@@ -3004,22 +3091,24 @@
   function renderPayrollRecord() {
     // 給与計算記録シートのデータを使用
     var tasks = loadPayrollRecords();
-    console.log('[renderPayrollRecord] 給与計算記録シートから表示:', tasks.length, '件');
-    var q = ((document.getElementById('payroll-record-search') || {}).value || '').toLowerCase().trim();
-
-    var filtered = q
-      ? tasks.filter(function(t) {
-          return (t.client || '').toLowerCase().indexOf(q) !== -1 ||
-                 (t.text   || '').toLowerCase().indexOf(q) !== -1 ||
-                 (t.category || '').toLowerCase().indexOf(q) !== -1;
-        })
-      : tasks;
+    // プルダウン選択肢を更新
+    buildFilterOptions('payroll-filter-client', tasks, function(t) { return t.client || ''; });
+    buildFilterOptions('payroll-filter-category', tasks, function(t) { return t.category || ''; });
+    buildFilterOptions('payroll-filter-assignee', tasks,
+      function(t) { return t.assignee || ''; },
+      function(t) { return ASSIGNEE_LABEL[t.assignee] || t.assignee || ''; }
+    );
+    // フィルタ適用
+    var q = ((document.getElementById('payroll-record-search') || {}).value || '');
+    var filtered = applyListFilters(tasks, q, 'payroll');
 
     filtered = filtered.slice().sort(function(a, b) {
       var da = a.recordDate || a.due || '';
       var db = b.recordDate || b.due || '';
       return da < db ? 1 : da > db ? -1 : 0;
     });
+
+    filteredPayrollData = filtered;
 
     var tbody = document.getElementById('payroll-record-tbody');
     var empty = document.getElementById('payroll-record-empty');
@@ -3054,9 +3143,18 @@
     var records = loadRecords().filter(function(t) {
       return !isPayrollTask(t);
     });
-    console.log('[renderDoneList] 記録シートから表示:', records.length, '件');
+    // プルダウン選択肢を更新
+    buildFilterOptions('done-filter-client', records, function(t) { return t.client || ''; });
+    buildFilterOptions('done-filter-category', records, function(t) { return t.category || ''; });
+    buildFilterOptions('done-filter-assignee', records,
+      function(t) { return t.assignee || ''; },
+      function(t) { return ASSIGNEE_LABEL[t.assignee] || t.assignee || ''; }
+    );
+    // フィルタ適用
     var q = (document.getElementById('done-search') || {}).value || '';
-    renderArchiveTable('done-tbody', 'done-empty', records, q);
+    var filtered = applyListFilters(records, q, 'done');
+    filteredDoneData = filtered;
+    renderArchiveTable('done-tbody', 'done-empty', filtered, '');
   }
 
   // ===== 手続き件数 集計 =====
@@ -5337,11 +5435,11 @@
       // 時間集計画面のフィルタ済みデータ
       allRows = getTimeSummaryRows();
     } else if (source === 'payroll') {
-      // 給与計算記録のみ
-      allRows = loadPayrollRecords();
+      // 給与計算記録（フィルタ適用済み）
+      allRows = filteredPayrollData !== null ? filteredPayrollData : loadPayrollRecords();
     } else if (source === 'done') {
-      // 完了一覧（記録シート、給与計算系除外）
-      allRows = loadRecords().filter(function(t) { return !isPayrollTask(t); });
+      // 完了一覧（フィルタ適用済み）
+      allRows = filteredDoneData !== null ? filteredDoneData : loadRecords().filter(function(t) { return !isPayrollTask(t); });
     } else {
       // 両方統合
       allRows = loadRecords().concat(loadPayrollRecords());
