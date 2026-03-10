@@ -1085,7 +1085,7 @@
         </div>
       </div>
       <!-- 合計サマリー -->
-      <div id="ts-total-box" style="background:#f0f7f0;border-radius:10px;padding:12px 20px;margin-bottom:16px;display:flex;gap:28px;flex-wrap:wrap;"></div>
+      <div id="ts-total-box" style="background:#f0f7f0;border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;gap:0;flex-wrap:wrap;"></div>
       <!-- 明細テーブル -->
       <div class="client-table-wrap">
         <table>
@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v18 (期間フィルタ追加)');
+  console.log('[app] コードバージョン: 2026-03-10-v19 (時間集計サマリー改善)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -5304,38 +5304,89 @@
 
   function renderTimeSummary() {
     var rows = getTimeSummaryRows();
+
+    // ===== 本日・今月の作業時間（フィルタ前の全データから算出） =====
+    var allData = (function() {
+      var records = loadRecords().map(function(t) {
+        return { recordDate: t.recordDate || '', workMinutes: parseInt(t.workMinutes, 10) || 0 };
+      });
+      var payroll = loadPayrollRecords().map(function(t) {
+        return { recordDate: t.recordDate || '', workMinutes: parseInt(t.workMinutes, 10) || 0 };
+      });
+      var consult = loadConsultations().map(function(t) {
+        return { recordDate: t.datetime || '', workMinutes: parseInt(t.workMinutes, 10) || 0 };
+      });
+      return records.concat(payroll).concat(consult);
+    })();
+    var now = new Date();
+    var todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    var thisMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    var todayMins = allData.reduce(function(s, t) { return s + ((t.recordDate || '').slice(0, 10) === todayStr ? (t.workMinutes || 0) : 0); }, 0);
+    var monthMins = allData.reduce(function(s, t) { return s + ((t.recordDate || '').slice(0, 7) === thisMonthStr ? (t.workMinutes || 0) : 0); }, 0);
+
+    // ===== フィルタ済みデータでの集計 =====
     var totalMins = rows.reduce(function(s, t) { return s + (t.workMinutes || 0); }, 0);
 
-    // 顧問先別集計
+    // 顧問先別集計（降順ソート → 上位5件 + その他）
     var byClient = {};
     rows.forEach(function(t) {
       var k = t.client || '（顧問先未設定）';
       byClient[k] = (byClient[k] || 0) + (t.workMinutes || 0);
     });
+    var clientSorted = Object.keys(byClient).map(function(k) {
+      return { name: k, mins: byClient[k] };
+    }).sort(function(a, b) { return b.mins - a.mins; });
+    var clientTop5 = clientSorted.slice(0, 5);
+    var clientOtherMins = clientSorted.slice(5).reduce(function(s, c) { return s + c.mins; }, 0);
 
-    // 担当者別集計
+    // 担当者別集計（降順ソート）
     var byAssignee = {};
     rows.forEach(function(t) {
       var k = ASSIGNEE_LABEL[t.assignee] || t.assignee || '（未設定）';
       byAssignee[k] = (byAssignee[k] || 0) + (t.workMinutes || 0);
     });
+    var assigneeSorted = Object.keys(byAssignee).map(function(k) {
+      return { name: k, mins: byAssignee[k] };
+    }).sort(function(a, b) { return b.mins - a.mins; });
 
-    // 合計ボックス
+    // ===== サマリーボックス描画 =====
     var totalBox = document.getElementById('ts-total-box');
     if (totalBox) {
-      var clientItems = Object.keys(byClient).map(function(k) {
-        return '<span style="font-size:0.82rem;color:#5a7a5e;">' + esc(k) + '：' + minsToLabel(byClient[k]) + '</span>';
-      }).join('<span style="color:#c8ddc8;margin:0 6px;">|</span>');
-      var asgItems = Object.keys(byAssignee).map(function(k) {
-        return '<span style="font-size:0.82rem;color:#5a7a5e;">' + esc(k) + '：' + minsToLabel(byAssignee[k]) + '</span>';
-      }).join('<span style="color:#c8ddc8;margin:0 6px;">|</span>');
-      totalBox.innerHTML =
-        '<div style="flex:0 0 auto;">' +
-          '<div style="font-size:0.75rem;color:#9e9e9e;margin-bottom:3px;">合計</div>' +
-          '<div style="font-size:1.3rem;font-weight:700;color:#1a3320;">' + (minsToLabel(totalMins) || '—') + '</div>' +
-        '</div>' +
-        (clientItems ? '<div style="flex:1;border-left:1px solid #c8ddc8;padding-left:16px;"><div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">顧問先別</div>' + clientItems + '</div>' : '') +
-        (asgItems   ? '<div style="flex:1;border-left:1px solid #c8ddc8;padding-left:16px;"><div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">担当者別</div>' + asgItems + '</div>' : '');
+      // 左ブロック：本日 + 今月
+      var leftBlock =
+        '<div style="flex:0 0 auto;min-width:140px;padding-right:20px;">' +
+          '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:2px;">本日の作業時間</div>' +
+          '<div style="font-size:1.6rem;font-weight:700;color:#1a3320;line-height:1.2;">' + (minsToLabel(todayMins) || '0分') + '</div>' +
+          '<div style="font-size:0.78rem;color:#7a9a7e;margin-top:6px;">今月の合計 ' + (minsToLabel(monthMins) || '0分') + '</div>' +
+        '</div>';
+
+      // 中央ブロック：顧問先別（上位5社＋その他）
+      var clientHtml = clientTop5.map(function(c) {
+        return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:0.82rem;color:#5a7a5e;line-height:1.6;">' +
+          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(c.name) + '</span>' +
+          '<span style="white-space:nowrap;font-weight:600;">' + minsToLabel(c.mins) + '</span></div>';
+      }).join('');
+      if (clientOtherMins > 0) {
+        clientHtml += '<div style="display:flex;justify-content:space-between;gap:12px;font-size:0.82rem;color:#9e9e9e;line-height:1.6;">' +
+          '<span>その他</span><span style="font-weight:600;">' + minsToLabel(clientOtherMins) + '</span></div>';
+      }
+      var centerBlock = clientHtml
+        ? '<div style="flex:1;min-width:180px;border-left:1px solid #c8ddc8;padding:0 20px;">' +
+            '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">顧問先別（上位5社）</div>' + clientHtml + '</div>'
+        : '';
+
+      // 右ブロック：担当者別（多い順）
+      var assigneeHtml = assigneeSorted.map(function(a) {
+        return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:0.82rem;color:#5a7a5e;line-height:1.6;">' +
+          '<span>' + esc(a.name) + '</span>' +
+          '<span style="white-space:nowrap;font-weight:600;">' + minsToLabel(a.mins) + '</span></div>';
+      }).join('');
+      var rightBlock = assigneeHtml
+        ? '<div style="flex:0 0 auto;min-width:120px;border-left:1px solid #c8ddc8;padding-left:20px;">' +
+            '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">担当者別</div>' + assigneeHtml + '</div>'
+        : '';
+
+      totalBox.innerHTML = leftBlock + centerBlock + rightBlock;
     }
 
     // 明細テーブル
