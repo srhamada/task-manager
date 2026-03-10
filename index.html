@@ -1740,7 +1740,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v28 (カレンダー休日背景色)');
+  console.log('[app] コードバージョン: 2026-03-10-v29 (休日日付UTC補正)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -4622,8 +4622,17 @@
       .then(function(rows) {
         if (!Array.isArray(rows)) rows = [];
         holidayMasterCache = rows.map(function(r) {
+          var raw = r['日付'] || '';
+          var dateStr = '';
+          // ISO文字列(UTC)が来た場合はJST変換してyyyy-MM-ddを取得
+          if (typeof raw === 'string' && raw.match(/^\d{4}-\d{2}-\d{2}T/)) {
+            var d = new Date(raw);
+            dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          } else {
+            dateStr = String(raw).slice(0, 10);
+          }
           return {
-            date: String(r['日付'] || '').slice(0, 10),
+            date: dateStr,
             type: String(r['種別'] || ''),
             name: String(r['名称'] || '')
           };
