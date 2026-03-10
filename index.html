@@ -1225,12 +1225,14 @@
       <!-- 凡例 -->
       <div class="cal-legend">
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#e53935;"></div>TODO期限超過</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#f57c00;"></div>TODO今週中</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#C38E70;"></div>TODO今週中</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#1976d2;"></div>TODO来週以降</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#7e57c2;"></div>相談対応</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#f9a825;"></div>問い合わせ</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#ef6c00;"></div>給与支給日</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#F28C28;"></div>給与支給日</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#4caf50;"></div>ストレスチェック</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#e53935;"></div>祝日</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#9e9e9e;"></div>事務所休日</div>
       </div>
       <!-- ナビゲーション -->
       <div class="cal-nav">
@@ -1738,7 +1740,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v26 (ステータスクリック無効化)');
+  console.log('[app] コードバージョン: 2026-03-10-v27 (休日カレンダー連携)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2175,7 +2177,8 @@
       fetchPayrollRecordsFromSheet(),
       fetchClientsFromSheet(),
       fetchInquiriesFromSheet(),
-      fetchActivityLog()
+      fetchActivityLog(),
+      fetchHolidayMaster()
     ]).then(function() {
       renderTasks();
       updateAllStats();
@@ -4596,18 +4599,42 @@
   // ===== 期限カレンダー =====
   var calYear  = new Date().getFullYear();
   var calMonth = new Date().getMonth(); // 0-indexed
+  var holidayMasterCache = []; // 休日マスタキャッシュ
 
   var CAL_EVENT_COLORS = {
     // TODO緊急度別（期限日と今日の関係で決定）
     todo_overdue:  '#e53935',  // 赤：期限超過
-    todo_thisweek: '#f57c00',  // オレンジ：今週中
+    todo_thisweek: '#C38E70',  // ブラウン：今週中
     todo_future:   '#1976d2',  // 青：来週以降
     // その他
     consult: '#7e57c2',  // 紫：相談対応
     inquiry: '#f9a825',  // 黄：問い合わせ
-    payroll: '#ef6c00',  // オレンジ：給与支給日
-    stress:  '#4caf50'   // 緑：ストレスチェック
+    payroll: '#F28C28',  // オレンジ：給与支給日
+    stress:  '#4caf50',  // 緑：ストレスチェック
+    holiday: '#e53935',  // 赤：祝日
+    office_holiday: '#9e9e9e'  // グレー：事務所休日
   };
+
+  // 休日マスタ取得
+  function fetchHolidayMaster() {
+    return fetch(GAS_URL + '?action=getHolidayMaster')
+      .then(function(res) { return res.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) rows = [];
+        holidayMasterCache = rows.map(function(r) {
+          return {
+            date: String(r['日付'] || '').slice(0, 10),
+            type: String(r['種別'] || ''),
+            name: String(r['名称'] || '')
+          };
+        });
+        return holidayMasterCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchHolidayMaster] 失敗:', e);
+        return [];
+      });
+  }
 
   function getCalendarEvents(year, month) {
     var events = [];
@@ -4660,6 +4687,14 @@
         if (parseInt(c.stressCheckMonth, 10) === month + 1) {
           events.push({ date: year + '-' + mm + '-01', text: c.name + ' ストレスチェック実施月', type: 'stress' });
         }
+      }
+    });
+
+    // ⑥ 休日マスタ（祝日・事務所休日）
+    holidayMasterCache.forEach(function(h) {
+      if (h.date && h.date.slice(0, 7) === monthStr) {
+        var hType = h.type === '事務所休日' ? 'office_holiday' : 'holiday';
+        events.push({ date: h.date, text: h.name || h.type, type: hType });
       }
     });
 
@@ -5708,7 +5743,8 @@
     fetchPayrollRecordsFromSheet(),
     fetchClientsFromSheet(),
     fetchInquiriesFromSheet(),
-    fetchActivityLog()
+    fetchActivityLog(),
+    fetchHolidayMaster()
   ]).then(function() {
     console.log('[初期化] Promise.all 完了（全シート取得済み）');
     console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');

@@ -12,6 +12,7 @@ var SHEET_INQUIRY = '行政問い合わせ記録';
 var SHEET_CONSULT = '相談記録';
 var SHEET_BUSY    = '算定年更管理';
 var SHEET_ACTIVITY = 'アクティビティログ';
+var SHEET_HOLIDAY  = '休日マスタ';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
@@ -35,6 +36,11 @@ function doGet(e) {
   // ── アクティビティログ取得（直近20件） ──
   if (action === 'getActivityLog') {
     return handleGetActivityLog_();
+  }
+
+  // ── 休日マスタ取得 ──
+  if (action === 'getHolidayMaster') {
+    return handleGetHolidayMaster_();
   }
 
   var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
@@ -483,6 +489,33 @@ function handleCompleteConsultTodo_(ss, data) {
   }
 
   return jsonResponse_({ success: false, error: '該当ID(' + targetId + ')が見つかりません' });
+}
+
+// --------------- 休日マスタ ---------------
+function handleGetHolidayMaster_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_HOLIDAY);
+  if (!sheet) {
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = data[i][j];
+      // 日付列はyyyy-MM-dd文字列に変換
+      if (headers[j] === '日付' && val instanceof Date) {
+        val = Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy-MM-dd');
+      }
+      obj[headers[j]] = val;
+    }
+    result.push(obj);
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // --------------- アクティビティログ ---------------
