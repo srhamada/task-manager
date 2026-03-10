@@ -48,6 +48,11 @@ function doGet(e) {
     return handleGetMemberStatuses_();
   }
 
+  // ── 一言メッセージ取得 ──
+  if (action === 'getMessages') {
+    return handleGetMessages_();
+  }
+
   var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
@@ -144,6 +149,16 @@ function doPost(e) {
     // ── 担当者状態更新 ──
     if (data.action === 'setMemberStatus') {
       return handleSetMemberStatus_(data);
+    }
+
+    // ── 一言メッセージ投稿 ──
+    if (data.action === 'postMessage') {
+      return handlePostMessage_(data);
+    }
+
+    // ── 一言メッセージ削除 ──
+    if (data.action === 'deleteMessage') {
+      return handleDeleteMessage_(data);
     }
 
     // ── 算定年更管理 一括保存 ──
@@ -697,6 +712,50 @@ function handleSetMemberStatus_(data) {
   // CacheService最大6時間（21600秒）
   cache.put('memberStatuses', JSON.stringify(statuses), 21600);
   return jsonResponse_({ success: true, name: name, status: status, updatedAt: nowJST });
+}
+
+// --------------- 一言メッセージ（一時保存） ---------------
+
+var MSG_CACHE_KEY = 'quickMessages';
+var MSG_MAX_COUNT = 5;
+
+function handleGetMessages_() {
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get(MSG_CACHE_KEY);
+  var messages = raw ? JSON.parse(raw) : [];
+  return jsonResponse_(messages);
+}
+
+function handlePostMessage_(data) {
+  var text = (data.text || '').trim();
+  if (!text) return jsonResponse_({ success: false, error: 'text is required' });
+  var from = data.from || '';
+  var to = data.to || '';
+  if (!from || !to) return jsonResponse_({ success: false, error: 'from and to are required' });
+
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get(MSG_CACHE_KEY);
+  var messages = raw ? JSON.parse(raw) : [];
+
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
+  var msg = { id: new Date().getTime(), text: text, from: from, to: to, ts: nowJST };
+  messages.unshift(msg);
+  if (messages.length > MSG_MAX_COUNT) messages = messages.slice(0, MSG_MAX_COUNT);
+
+  cache.put(MSG_CACHE_KEY, JSON.stringify(messages), 21600);
+  return jsonResponse_({ success: true, message: msg });
+}
+
+function handleDeleteMessage_(data) {
+  var id = data.id;
+  if (!id) return jsonResponse_({ success: false, error: 'id is required' });
+
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get(MSG_CACHE_KEY);
+  var messages = raw ? JSON.parse(raw) : [];
+  messages = messages.filter(function(m) { return m.id !== id; });
+  cache.put(MSG_CACHE_KEY, JSON.stringify(messages), 21600);
+  return jsonResponse_({ success: true });
 }
 
 // --------------- ユーティリティ ---------------
