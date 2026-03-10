@@ -1740,7 +1740,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v27 (休日カレンダー連携)');
+  console.log('[app] コードバージョン: 2026-03-10-v28 (カレンダー休日背景色)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -4734,6 +4734,12 @@
       html += '<div class="cal-cell other-month"></div>';
     }
 
+    // 休日マスタを日付→種別のマップに変換
+    var holidayMap = {};
+    holidayMasterCache.forEach(function(h) {
+      if (h.date) holidayMap[h.date] = h.type;
+    });
+
     // 当月の日
     for (var day = 1; day <= lastDate; day++) {
       var dateStr  = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
@@ -4741,6 +4747,20 @@
       var dow      = cellDate.getDay();
       var isToday  = cellDate.getTime() === today.getTime();
       var dowCls   = dow === 0 ? ' sun' : dow === 6 ? ' sat' : '';
+
+      // セル背景色（優先順位: 祝日 > 事務所休日 > 日曜 > 土曜 > 通常）
+      var cellBg = '';
+      var hType = holidayMap[dateStr] || '';
+      if (hType && hType !== '事務所休日') {
+        cellBg = '#FFF3F3'; // 祝日
+      } else if (hType === '事務所休日') {
+        cellBg = '#F5F5F5'; // 事務所休日
+      } else if (dow === 0) {
+        cellBg = '#FFF6F6'; // 日曜
+      } else if (dow === 6) {
+        cellBg = '#F7FBFF'; // 土曜
+      }
+      var cellStyle = isToday ? '' : (cellBg ? ' style="background:' + cellBg + ';"' : '');
       var cellCls  = isToday ? ' today' : '';
 
       var dayNumHtml;
@@ -4762,7 +4782,7 @@
         }
       });
 
-      html += '<div class="cal-cell' + cellCls + '">' + dayNumHtml + evHtml + '</div>';
+      html += '<div class="cal-cell' + cellCls + '"' + cellStyle + '>' + dayNumHtml + evHtml + '</div>';
     }
 
     // 後ろの空白（6週分になるよう埋める）
