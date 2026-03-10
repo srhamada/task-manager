@@ -1766,7 +1766,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v37 (一言メッセージDB保存)');
+  console.log('[app] コードバージョン: 2026-03-10-v38 (メッセージ保存修正)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2390,6 +2390,7 @@
     return fetch(GAS_URL + '?action=getMessages')
       .then(function(res) { return res.json(); })
       .then(function(data) {
+        console.log('[fetchQuickMessages] 取得データ:', JSON.stringify(data));
         quickMsgCache = Array.isArray(data) ? data : [];
         renderQuickMessages();
         return quickMsgCache;
@@ -2434,24 +2435,30 @@
     var myId = localStorage.getItem('myMemberId') || 'hamada';
     var myName = '';
     MEMBER_LIST.forEach(function(m) { if (m.id === myId) myName = m.name; });
-    if (!myName) return;
+    // フォールバック: MEMBER_LISTで見つからなければIDから直接変換
+    if (!myName) myName = myId === 'hamada' ? '濱田' : '髙嵜';
 
     var to = toEl.value;
+    var payload = { action: 'postMessage', text: text, from: myName, to: to };
+    console.log('[sendQuickMsg] 送信データ:', JSON.stringify(payload));
     textEl.value = '';
 
     fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'postMessage', text: text, from: myName, to: to })
+      body: JSON.stringify(payload)
     })
     .then(function(res) { return res.json(); })
     .then(function(data) {
+      console.log('[sendQuickMsg] レスポンス:', JSON.stringify(data));
       if (data.success) {
         fetchQuickMessages();
+      } else {
+        console.error('[sendQuickMsg] 保存失敗:', data.error || '不明なエラー');
       }
     })
     .catch(function(e) {
-      console.error('[sendQuickMsg] 失敗:', e);
+      console.error('[sendQuickMsg] 通信エラー:', e);
     });
   }
 
