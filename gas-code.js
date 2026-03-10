@@ -403,13 +403,6 @@ function handleUpdateRow_(ss, data) {
       var rowNum = i + 1;
       Logger.log('[updateRow] ID=' + targetId + ' → 行' + rowNum);
 
-      // ★デバッグ用: 更新前のメモ値を取得
-      var memoIdx = -1;
-      for (var mi = 0; mi < headers.length; mi++) {
-        if (String(headers[mi]).indexOf('メモ') !== -1) { memoIdx = mi; break; }
-      }
-      var beforeMemo = memoIdx >= 0 ? sheet.getRange(rowNum, memoIdx + 1).getValue() : '(メモ列なし)';
-
       // 送信されたフィールドをヘッダーに基づいて更新
       for (var j = 0; j < headers.length; j++) {
         var colName = headers[j];
@@ -426,21 +419,8 @@ function handleUpdateRow_(ss, data) {
         }
       }
 
-      // ★デバッグ用: 更新後のメモ値を取得
-      var afterMemo = memoIdx >= 0 ? sheet.getRange(rowNum, memoIdx + 1).getValue() : '(メモ列なし)';
-
-      return jsonResponse_({
-        success: true,
-        updatedRow: rowNum,
-        debug: {
-          sheetName: sheet.getName(),
-          headers: headers,
-          memoIndex: memoIdx,
-          memoHeaderName: memoIdx >= 0 ? headers[memoIdx] : null,
-          dataMemo: data['メモ'] !== undefined ? data['メモ'] : '(undefined)',
-          beforeMemo: beforeMemo,
-          afterMemo: afterMemo
-        }
+      Logger.log('[updateRow] 行' + rowNum + ' の更新完了');
+      return jsonResponse_({ success: true, updatedRow: rowNum
       });
     }
   }
