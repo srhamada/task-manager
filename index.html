@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v19 (時間集計サマリー改善)');
+  console.log('[app] コードバージョン: 2026-03-10-v20 (サマリー表示調整)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -5352,7 +5352,7 @@
     // ===== サマリーボックス描画 =====
     var totalBox = document.getElementById('ts-total-box');
     if (totalBox) {
-      // 左ブロック：本日 + 今月
+      // 左ブロック：本日の作業時間 + 今月の合計
       var leftBlock =
         '<div style="flex:0 0 auto;min-width:140px;padding-right:20px;">' +
           '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:2px;">本日の作業時間</div>' +
@@ -5360,30 +5360,29 @@
           '<div style="font-size:0.78rem;color:#7a9a7e;margin-top:6px;">今月の合計 ' + (minsToLabel(monthMins) || '0分') + '</div>' +
         '</div>';
 
-      // 中央ブロック：顧問先別（上位5社＋その他）
-      var clientHtml = clientTop5.map(function(c) {
-        return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:0.82rem;color:#5a7a5e;line-height:1.6;">' +
-          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(c.name) + '</span>' +
-          '<span style="white-space:nowrap;font-weight:600;">' + minsToLabel(c.mins) + '</span></div>';
-      }).join('');
+      // 中央ブロック：今月の顧問先別（上位5社＋その他）— 2列グリッド
+      var clientItems = clientTop5.map(function(c) {
+        return '<div style="font-size:0.82rem;color:#5a7a5e;line-height:1.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+          esc(c.name) + '：<strong>' + minsToLabel(c.mins) + '</strong></div>';
+      });
       if (clientOtherMins > 0) {
-        clientHtml += '<div style="display:flex;justify-content:space-between;gap:12px;font-size:0.82rem;color:#9e9e9e;line-height:1.6;">' +
-          '<span>その他</span><span style="font-weight:600;">' + minsToLabel(clientOtherMins) + '</span></div>';
+        clientItems.push('<div style="font-size:0.82rem;color:#9e9e9e;line-height:1.7;white-space:nowrap;">その他：<strong>' + minsToLabel(clientOtherMins) + '</strong></div>');
       }
-      var centerBlock = clientHtml
-        ? '<div style="flex:1;min-width:180px;border-left:1px solid #c8ddc8;padding:0 20px;">' +
-            '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">顧問先別（上位5社）</div>' + clientHtml + '</div>'
+      var centerBlock = clientItems.length
+        ? '<div style="flex:1;min-width:200px;border-left:1px solid #c8ddc8;padding:0 20px;">' +
+            '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">今月の顧問先別（上位5社）</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(2,1fr);column-gap:16px;">' + clientItems.join('') + '</div>' +
+          '</div>'
         : '';
 
-      // 右ブロック：担当者別（多い順）
+      // 右ブロック：今月の担当者別（多い順）
       var assigneeHtml = assigneeSorted.map(function(a) {
-        return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:0.82rem;color:#5a7a5e;line-height:1.6;">' +
-          '<span>' + esc(a.name) + '</span>' +
-          '<span style="white-space:nowrap;font-weight:600;">' + minsToLabel(a.mins) + '</span></div>';
+        return '<div style="font-size:0.82rem;color:#5a7a5e;line-height:1.7;white-space:nowrap;">' +
+          esc(a.name) + '：<strong>' + minsToLabel(a.mins) + '</strong></div>';
       }).join('');
       var rightBlock = assigneeHtml
         ? '<div style="flex:0 0 auto;min-width:120px;border-left:1px solid #c8ddc8;padding-left:20px;">' +
-            '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">担当者別</div>' + assigneeHtml + '</div>'
+            '<div style="font-size:0.72rem;color:#9e9e9e;margin-bottom:4px;">今月の担当者別</div>' + assigneeHtml + '</div>'
         : '';
 
       totalBox.innerHTML = leftBlock + centerBlock + rightBlock;
