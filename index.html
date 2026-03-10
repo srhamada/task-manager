@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v23 (TODO編集保存ログ追加)');
+  console.log('[app] コードバージョン: 2026-03-10-v24 (TODO描画タイミング修正)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2056,9 +2056,7 @@
           return t;
         });
         console.log('[fetchTasksFromSheet] 正規化後1件目:', tasksCache.length > 0 ? JSON.stringify(tasksCache[0]) : '(なし)');
-        // タスク取得完了時点でTODO描画とカード統計を即座に更新
-        try { renderTasks(); } catch(e) { console.error('[fetchTasksFromSheet] renderTasks エラー:', e); }
-        try { updateAllStats(); } catch(e) { console.error('[fetchTasksFromSheet] updateAllStats エラー:', e); }
+        // ※ renderTasks / updateAllStats は呼び出し元（Promise.all完了後）で実行
         return tasksCache;
       })
       .catch(function(e) {
@@ -4855,13 +4853,7 @@
       updateAllStats();
       renderCalendar();
       addActivity('todo_updated', actText(target.client, target.text, ' を更新'));
-      console.log('[TODO編集保存] syncTaskToSheet呼び出し target=', JSON.stringify({
-        id: target.id, client: target.client, text: target.text,
-        status: target.status, memo: target.memo, workMinutes: target.workMinutes
-      }));
-      syncTaskToSheet(target).then(function(ok) {
-        console.log('[TODO編集保存] syncTaskToSheet結果:', ok);
-      });
+      syncTaskToSheet(target);
     }
   }
 
@@ -5672,8 +5664,10 @@
     fetchInquiriesFromSheet()
   ]).then(function() {
     console.log('[初期化] Promise.all 完了（全シート取得済み）');
-    console.log('[初期化] TODO:', loadTasks().length, '件, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件, 行政問い合わせ:', inquiriesCache.length, '件');
-    // 記録系データが揃った後に追加描画
+    console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');
+    // 全データ取得完了後に一括描画（TODO + 相談記録TODOのマージ後）
+    try { renderTasks(); } catch(e) { console.error('[初期化] renderTasks エラー:', e); }
+    try { updateAllStats(); } catch(e) { console.error('[初期化] updateAllStats エラー:', e); }
     try { renderDoneList(); } catch(e) { console.error('[初期化] renderDoneList エラー:', e); }
     try { renderPayrollRecord(); } catch(e) { console.error('[初期化] renderPayrollRecord エラー:', e); }
     // スプレッドシートから取得したクライアント・問い合わせを描画
