@@ -1740,7 +1740,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v29 (休日日付UTC補正)');
+  console.log('[app] コードバージョン: 2026-03-10-v30 (カレンダーイベント表示順)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -4705,6 +4705,16 @@
         var hType = h.type === '事務所休日' ? 'office_holiday' : 'holiday';
         events.push({ date: h.date, text: h.name || h.type, type: hType });
       }
+    });
+
+    // イベント表示順の優先度マップ
+    var CAL_EVENT_PRIORITY = {
+      holiday: 1, office_holiday: 2,
+      todo_overdue: 3, todo_thisweek: 4, todo_future: 5,
+      consult: 6, inquiry: 7, payroll: 8, stress: 9
+    };
+    events.sort(function(a, b) {
+      return (CAL_EVENT_PRIORITY[a.type] || 99) - (CAL_EVENT_PRIORITY[b.type] || 99);
     });
 
     return events;
