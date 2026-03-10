@@ -661,26 +661,28 @@
         <h1>ダッシュボード</h1>
         <p id="todayGreeting"></p>
       </div>
-      <!-- 一言メッセージ（小カード） -->
-      <div id="quick-msg-card" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:10px 14px;min-width:280px;max-width:360px;font-size:0.78rem;">
-        <div style="font-weight:600;color:#5a7a5e;margin-bottom:6px;font-size:0.76rem;">💬 一言メッセージ</div>
-        <div style="display:flex;gap:4px;margin-bottom:6px;align-items:center;">
-          <select id="msg-to" style="font-size:0.72rem;padding:2px 4px;border:1px solid #ccc;border-radius:4px;flex-shrink:0;">
-            <option value="濱田">→濱田</option>
-            <option value="髙嵜">→髙嵜</option>
-          </select>
-          <input id="msg-text" type="text" class="form-input" placeholder="メッセージを入力…"
-            style="flex:1;padding:3px 6px;font-size:0.76rem;" onkeydown="if(event.key==='Enter')sendQuickMsg()" />
-          <button onclick="sendQuickMsg()" class="btn btn-primary" style="padding:2px 8px;font-size:0.72rem;white-space:nowrap;flex-shrink:0;">送信</button>
+      <div style="display:flex;gap:12px;align-items:flex-start;flex-shrink:0;">
+        <!-- 一言メッセージ（小カード） -->
+        <div id="quick-msg-card" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:8px 12px;width:260px;font-size:0.78rem;">
+          <div style="font-weight:600;color:#5a7a5e;margin-bottom:5px;font-size:0.74rem;">💬 一言メッセージ</div>
+          <div style="display:flex;gap:3px;margin-bottom:5px;align-items:center;">
+            <select id="msg-to" style="font-size:0.70rem;padding:2px 3px;border:1px solid #ccc;border-radius:4px;flex-shrink:0;">
+              <option value="濱田">→濱田</option>
+              <option value="髙嵜">→髙嵜</option>
+            </select>
+            <input id="msg-text" type="text" class="form-input" placeholder="メッセージを入力…"
+              style="flex:1;padding:2px 5px;font-size:0.74rem;" onkeydown="if(event.key==='Enter')sendQuickMsg()" />
+            <button onclick="sendQuickMsg()" class="btn btn-primary" style="padding:2px 7px;font-size:0.70rem;white-space:nowrap;flex-shrink:0;">送信</button>
+          </div>
+          <div id="msg-list">
+            <div style="color:#bbb;text-align:center;padding:2px 0;font-size:0.70rem;">メッセージなし</div>
+          </div>
         </div>
-        <div id="msg-list">
-          <div style="color:#bbb;text-align:center;padding:2px 0;font-size:0.72rem;">メッセージなし</div>
+        <!-- 算定年更カード（付箋風・右上配置） -->
+        <div onclick="showPageByName('busy-season')" class="busy-season-card">
+          <div class="busy-season-title">📊 算定年更管理</div>
+          <div class="busy-season-body">今年の算定年更はこちら☆</div>
         </div>
-      </div>
-      <!-- 算定年更カード（付箋風・右上配置） -->
-      <div onclick="showPageByName('busy-season')" class="busy-season-card">
-        <div class="busy-season-title">📊 算定年更管理</div>
-        <div class="busy-season-body">今年の算定年更はこちら☆</div>
       </div>
     </div>
 
@@ -1764,7 +1766,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v35 (一言メッセージ小カード化)');
+  console.log('[app] コードバージョン: 2026-03-10-v36 (一言メッセージ右上配置)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
