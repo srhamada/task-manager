@@ -13,6 +13,7 @@ var SHEET_CONSULT = '相談記録';
 var SHEET_BUSY    = '算定年更管理';
 var SHEET_ACTIVITY = 'アクティビティログ';
 var SHEET_HOLIDAY  = '休日マスタ';
+var SHEET_MESSAGE  = '一言メッセージ';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
@@ -714,16 +715,33 @@ function handleSetMemberStatus_(data) {
   return jsonResponse_({ success: true, name: name, status: status, updatedAt: nowJST });
 }
 
-// --------------- 一言メッセージ（一時保存） ---------------
-
-var MSG_CACHE_KEY = 'quickMessages';
-var MSG_MAX_COUNT = 5;
+// --------------- 一言メッセージ（スプレッドシート保存） ---------------
 
 function handleGetMessages_() {
-  var cache = CacheService.getScriptCache();
-  var raw = cache.get(MSG_CACHE_KEY);
-  var messages = raw ? JSON.parse(raw) : [];
-  return jsonResponse_(messages);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_MESSAGE);
+  if (!sheet) return jsonResponse_([]);
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return jsonResponse_([]); // ヘッダーのみ
+
+  var messages = [];
+  for (var i = 1; i < data.length; i++) {
+    var ts = data[i][1];
+    if (ts instanceof Date) {
+      ts = Utilities.formatDate(ts, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
+    }
+    messages.push({
+      id: String(data[i][0]),
+      ts: String(ts || ''),
+      from: String(data[i][2] || ''),
+      to: String(data[i][3] || ''),
+      text: String(data[i][4] || '')
+    });
+  }
+  // 新しい順にソートして最新3件
+  messages.sort(function(a, b) { return a.ts > b.ts ? -1 : a.ts < b.ts ? 1 : 0; });
+  return jsonResponse_(messages.slice(0, 3));
 }
 
 function handlePostMessage_(data) {
@@ -733,29 +751,33 @@ function handlePostMessage_(data) {
   var to = data.to || '';
   if (!from || !to) return jsonResponse_({ success: false, error: 'from and to are required' });
 
-  var cache = CacheService.getScriptCache();
-  var raw = cache.get(MSG_CACHE_KEY);
-  var messages = raw ? JSON.parse(raw) : [];
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_MESSAGE);
+  if (!sheet) return jsonResponse_({ success: false, error: 'シートが見つかりません' });
 
+  var id = String(new Date().getTime());
   var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
-  var msg = { id: new Date().getTime(), text: text, from: from, to: to, ts: nowJST };
-  messages.unshift(msg);
-  if (messages.length > MSG_MAX_COUNT) messages = messages.slice(0, MSG_MAX_COUNT);
+  sheet.appendRow([id, nowJST, from, to, text]);
 
-  cache.put(MSG_CACHE_KEY, JSON.stringify(messages), 21600);
-  return jsonResponse_({ success: true, message: msg });
+  return jsonResponse_({ success: true, message: { id: id, ts: nowJST, from: from, to: to, text: text } });
 }
 
 function handleDeleteMessage_(data) {
-  var id = data.id;
+  var id = String(data.id || '');
   if (!id) return jsonResponse_({ success: false, error: 'id is required' });
 
-  var cache = CacheService.getScriptCache();
-  var raw = cache.get(MSG_CACHE_KEY);
-  var messages = raw ? JSON.parse(raw) : [];
-  messages = messages.filter(function(m) { return m.id !== id; });
-  cache.put(MSG_CACHE_KEY, JSON.stringify(messages), 21600);
-  return jsonResponse_({ success: true });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_MESSAGE);
+  if (!sheet) return jsonResponse_({ success: false, error: 'シートが見つかりません' });
+
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === id) {
+      sheet.deleteRow(i + 1);
+      return jsonResponse_({ success: true });
+    }
+  }
+  return jsonResponse_({ success: false, error: 'not found' });
 }
 
 // --------------- ユーティリティ ---------------

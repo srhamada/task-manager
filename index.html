@@ -1766,7 +1766,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v36 (一言メッセージ右上配置)');
+  console.log('[app] コードバージョン: 2026-03-10-v37 (一言メッセージDB保存)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2403,21 +2403,20 @@
     var el = document.getElementById('msg-list');
     if (!el) return;
     if (!quickMsgCache.length) {
-      el.innerHTML = '<div style="color:#bbb;text-align:center;padding:2px 0;font-size:0.72rem;">メッセージなし</div>';
+      el.innerHTML = '<div style="color:#bbb;text-align:center;padding:2px 0;font-size:0.70rem;">メッセージなし</div>';
       return;
     }
     var myId = localStorage.getItem('myMemberId') || 'hamada';
     var myName = '';
     MEMBER_LIST.forEach(function(m) { if (m.id === myId) myName = m.name; });
 
-    // 小カード: 最新2件のみ表示
-    var show = quickMsgCache.slice(0, 2);
+    var show = quickMsgCache.slice(0, 3);
     var html = '';
     show.forEach(function(msg) {
       var isToMe = msg.to === myName;
       var isMine = msg.from === myName;
       var bg = isToMe ? '#FFF8E1' : 'transparent';
-      var delBtn = isMine ? ' <span style="cursor:pointer;color:#bbb;font-size:0.68rem;" title="削除" onclick="deleteQuickMsg(' + msg.id + ')">×</span>' : '';
+      var delBtn = isMine ? " <span style=\"cursor:pointer;color:#bbb;font-size:0.68rem;\" title=\"削除\" onclick=\"deleteQuickMsg('" + msg.id + "')\">×</span>" : '';
       html += '<div style="padding:3px 0;border-bottom:1px solid #f0f0f0;background:' + bg + ';border-radius:2px;">';
       html += '<div style="font-size:0.68rem;color:#999;">' + esc(msg.from) + '→' + esc(msg.to) + ' ' + (msg.ts || '').slice(5) + delBtn + '</div>';
       html += '<div style="font-size:0.76rem;margin-top:1px;">' + esc(msg.text) + '</div>';
@@ -2447,10 +2446,8 @@
     })
     .then(function(res) { return res.json(); })
     .then(function(data) {
-      if (data.success && data.message) {
-        quickMsgCache.unshift(data.message);
-        if (quickMsgCache.length > 5) quickMsgCache = quickMsgCache.slice(0, 5);
-        renderQuickMessages();
+      if (data.success) {
+        fetchQuickMessages();
       }
     })
     .catch(function(e) {
@@ -2459,14 +2456,19 @@
   }
 
   function deleteQuickMsg(id) {
-    quickMsgCache = quickMsgCache.filter(function(m) { return m.id !== id; });
+    quickMsgCache = quickMsgCache.filter(function(m) { return String(m.id) !== String(id); });
     renderQuickMessages();
 
     fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'deleteMessage', id: id })
-    }).catch(function(e) {
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) fetchQuickMessages();
+    })
+    .catch(function(e) {
       console.error('[deleteQuickMsg] 失敗:', e);
     });
   }
