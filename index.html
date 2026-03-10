@@ -700,11 +700,11 @@
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
           <div class="section-title" style="margin-bottom:0;">今週のTODO</div>
-          <div style="display:flex;gap:5px;align-items:flex-start;">
+          <div style="display:flex;gap:5px;align-items:center;">
             <button id="filter-btn-all"      onclick="setFilter('')"           class="btn btn-primary"   style="padding:4px 12px;font-size:0.78rem;">すべて</button>
-            <button id="filter-btn-hamada"   onclick="setFilter('hamada')"   class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;display:flex;flex-direction:column;align-items:center;line-height:1.3;">濱田<span id="member-status-hamada" style="font-size:0.7rem;" title="在席">🟢</span></button>
-            <button id="filter-btn-takasaki" onclick="setFilter('takasaki')" class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;display:flex;flex-direction:column;align-items:center;line-height:1.3;">髙嵜<span id="member-status-takasaki" style="font-size:0.7rem;" title="在席">🟢</span></button>
-            <select id="my-status-select" onchange="onMyStatusChange(this.value)" style="font-size:0.72rem;padding:2px 4px;border:1px solid #ccc;border-radius:4px;margin-left:4px;">
+            <button id="filter-btn-hamada"   onclick="setFilter('hamada')"   class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;display:inline-flex;align-items:center;gap:4px;">濱田<span id="member-status-hamada" style="font-size:0.88rem;line-height:1;" title="在席">🟢</span></button>
+            <button id="filter-btn-takasaki" onclick="setFilter('takasaki')" class="btn btn-secondary" style="padding:4px 12px;font-size:0.78rem;display:inline-flex;align-items:center;gap:4px;">髙嵜<span id="member-status-takasaki" style="font-size:0.88rem;line-height:1;" title="在席">🟢</span></button>
+            <select id="my-status-select" onchange="onMyStatusChange(this.value)" style="font-size:0.76rem;padding:3px 6px;border:1px solid #ccc;border-radius:4px;margin-left:6px;">
               <option value="normal">🟢 在席</option>
               <option value="phone">☎️ 電話</option>
               <option value="toilet">🚻 トイレ</option>
@@ -1748,7 +1748,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v32 (担当者状態表示)');
+  console.log('[app] コードバージョン: 2026-03-10-v33 (担当者状態UI横並び)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
