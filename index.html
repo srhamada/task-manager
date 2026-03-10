@@ -1119,6 +1119,8 @@
         </div>
         <button class="btn btn-secondary" style="font-size:0.82rem;padding:5px 14px;white-space:nowrap;" onclick="exportClientCSV('payroll')">クライアント別CSV</button>
       </div>
+      <div id="payroll-filter-test" style="background:#ffe0e0;padding:8px;margin-bottom:8px;border:2px solid red;">フィルタUIテスト（給与計算記録）</div>
+      <select id="payrollClientFilter" style="margin-bottom:8px;"><option>テスト選択肢</option></select>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
         <select id="payroll-filter-client" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
           <option value="">クライアント：すべて</option>
@@ -1166,6 +1168,8 @@
         </div>
         <button class="btn btn-secondary" style="font-size:0.82rem;padding:5px 14px;white-space:nowrap;" onclick="exportClientCSV('done')">クライアント別CSV</button>
       </div>
+      <div id="done-filter-test" style="background:#e0ffe0;padding:8px;margin-bottom:8px;border:2px solid green;">フィルタUIテスト（完了一覧）</div>
+      <select id="doneClientFilter" style="margin-bottom:8px;"><option>テスト選択肢</option></select>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
         <select id="done-filter-client" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
           <option value="">クライアント：すべて</option>
@@ -1724,7 +1728,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v16 (フィルタUI追加)');
+  console.log('[app] コードバージョン: 2026-03-10-v17 (フィルタUIテスト)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
