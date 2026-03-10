@@ -11,6 +11,7 @@ var SHEET_CLIENT  = 'クライアント';
 var SHEET_INQUIRY = '行政問い合わせ記録';
 var SHEET_CONSULT = '相談記録';
 var SHEET_BUSY    = '算定年更管理';
+var SHEET_ACTIVITY = 'アクティビティログ';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
@@ -29,6 +30,11 @@ function doGet(e) {
   // ── 算定年更管理データ取得 ──
   if (action === 'getBusySeasonRecords') {
     return handleGetBusySeasonRecords_(e);
+  }
+
+  // ── アクティビティログ取得（直近20件） ──
+  if (action === 'getActivityLog') {
+    return handleGetActivityLog_();
   }
 
   var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
@@ -107,6 +113,11 @@ function doPost(e) {
 
     Logger.log('[doPost] action=' + (data.action || '(なし)'));
     Logger.log('[doPost] ★data全体: ' + JSON.stringify(data));
+
+    // ── アクティビティログ追加 ──
+    if (data.action === 'logActivity') {
+      return handleLogActivity_(ss, data);
+    }
 
     // ── TODO完了アクション（完了処理を一括実行） ──
     if (data.action === 'completeTodo') {
@@ -472,6 +483,57 @@ function handleCompleteConsultTodo_(ss, data) {
   }
 
   return jsonResponse_({ success: false, error: '該当ID(' + targetId + ')が見つかりません' });
+}
+
+// --------------- アクティビティログ ---------------
+
+// ログ追加
+function handleLogActivity_(ss, data) {
+  var sheet = ss.getSheetByName(SHEET_ACTIVITY);
+  if (!sheet) {
+    // シートがなければ作成
+    var headers = ['日時','操作種別','対象種別','クライアント名','件名','詳細','実行者','元データID','元シート','備考'];
+    sheet = ss.insertSheet(SHEET_ACTIVITY);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  var row = [
+    nowJST,
+    data['操作種別'] || '',
+    data['対象種別'] || '',
+    data['クライアント名'] || '',
+    data['件名'] || '',
+    data['詳細'] || '',
+    data['実行者'] || '',
+    data['元データID'] || '',
+    data['元シート'] || '',
+    data['備考'] || ''
+  ];
+  sheet.appendRow(row);
+  return jsonResponse_({ success: true });
+}
+
+// ログ取得（直近20件、新しい順）
+function handleGetActivityLog_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_ACTIVITY);
+  if (!sheet) {
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var result = [];
+  // 末尾（最新）から20件取得
+  for (var i = data.length - 1; i >= 1 && result.length < 20; i--) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    result.push(obj);
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // --------------- 算定年更管理 ---------------

@@ -1738,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v24 (TODO描画タイミング修正)');
+  console.log('[app] コードバージョン: 2026-03-10-v25 (アクティビティログ共有化)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1784,54 +1784,99 @@
   });
 
   // ===== アクティビティログ =====
-  var ACTIVITY_KEY = 'sr_activities';
+  // ===== アクティビティログ（スプレッドDB共有） =====
 
-  // actionType → ドット色の対応（1か所で管理。hex直指定でCSS依存なし）
-  var ACT_META = {
-    // ---- 操作種別ベース（新方式）----
-    inquiry_created:      { color: '#f9a825' },  // 黄：問い合わせ記録追加
-    inquiry_updated:      { color: '#f9a825' },  // 黄：問い合わせ記録更新
-    consultation_created: { color: '#7e57c2' },  // 紫：相談記録追加
-    consultation_updated: { color: '#7e57c2' },  // 紫：相談記録更新
-    todo_created:         { color: '#1976d2' },  // 青：TODO追加
-    todo_updated:         { color: '#26c6da' },  // 水色：TODO更新
-    todo_status_changed:  { color: '#4caf50' },  // 緑：TODOステータス変更
-    todo_deleted:         { color: '#90a4ae' },  // グレー：TODO削除
-    // ---- 旧typeキー互換（localStorage既存データ用）----
-    client:  { color: '#4caf50' },
-    todo:    { color: '#1976d2' },
-    record:  { color: '#26c6da' },
-    payroll: { color: '#ef6c00' },
-    consult: { color: '#7e57c2' },
-    inquiry: { color: '#f9a825' },
-    done:    { color: '#90a4ae' }
+  var activityCache = []; // シートから取得したログのキャッシュ
+
+  // actionType → 対象種別マッピング
+  var ACT_TYPE_TO_TARGET = {
+    todo_created: 'TODO', todo_updated: 'TODO', todo_status_changed: 'TODO', todo_deleted: 'TODO',
+    consultation_created: '相談記録', consultation_updated: '相談記録',
+    inquiry_created: '行政問い合わせ', inquiry_updated: '行政問い合わせ',
+    client: 'クライアント', record: '記録', payroll: '給与計算', done: '完了'
+  };
+
+  // actionType → 操作種別マッピング
+  var ACT_TYPE_TO_OP = {
+    todo_created: '追加', todo_updated: '更新', todo_status_changed: 'ステータス変更', todo_deleted: '削除',
+    consultation_created: '追加', consultation_updated: '更新',
+    inquiry_created: '追加', inquiry_updated: '更新',
+    client: '更新', record: '追加', payroll: '追加', done: '完了'
   };
 
   function loadActivities() {
-    try { return JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]'); }
-    catch(e) { return []; }
-  }
-
-  function saveActivities(data) {
-    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(data));
+    return activityCache.slice();
   }
 
   // アクティビティ表示テキスト生成ヘルパー
-  // subject にすでに client が含まれている場合は重複しない
   function actText(client, subject, verb) {
     if (client && subject.indexOf(client) === 0) {
-      // subject が "株式会社ひまわり：テスト" の形で始まっている場合
       return subject + verb;
     }
     return (client ? client + ' の' : '') + subject + verb;
   }
 
+  // シートからアクティビティログを取得
+  function fetchActivityLog() {
+    return fetch(GAS_URL + '?action=getActivityLog')
+      .then(function(res) { return res.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) rows = [];
+        activityCache = rows.map(function(row) {
+          return {
+            ts: row['日時'] || '',
+            type: row['操作種別'] || '',
+            text: (row['クライアント名'] ? row['クライアント名'] + ' の' : '') + (row['件名'] || '') + (row['詳細'] || '')
+          };
+        });
+        return activityCache;
+      })
+      .catch(function(e) {
+        console.error('[fetchActivityLog] 失敗:', e);
+        return [];
+      });
+  }
+
+  // アクティビティをスプレッドDBに追加（非同期、UIブロックしない）
   function addActivity(actionType, text) {
-    var acts = loadActivities();
-    acts.unshift({ id: Date.now(), ts: new Date().toISOString(), type: actionType, text: text });
-    if (acts.length > 50) acts = acts.slice(0, 50);
-    saveActivities(acts);
-    renderActivityList(); // 保存のたびに即時反映
+    // テキストからクライアント名・件名を分離
+    var client = '';
+    var subject = text;
+    var noIdx = text.indexOf(' の');
+    if (noIdx !== -1) {
+      client = text.slice(0, noIdx);
+      subject = text.slice(noIdx + 2);
+    }
+    var opType = ACT_TYPE_TO_OP[actionType] || '操作';
+    var targetType = ACT_TYPE_TO_TARGET[actionType] || '';
+
+    // ローカルキャッシュに即追加（即時UI反映用）
+    activityCache.unshift({
+      ts: new Date().toISOString(),
+      type: opType,
+      text: text
+    });
+    if (activityCache.length > 20) activityCache = activityCache.slice(0, 20);
+    renderActivityList();
+
+    // GASへ非同期POST（失敗してもUIには影響しない）
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'logActivity',
+        '操作種別': opType,
+        '対象種別': targetType,
+        'クライアント名': client,
+        '件名': subject,
+        '実行者': '',
+        '元データID': '',
+        '元シート': '',
+        '備考': ''
+      })
+    }).catch(function(e) {
+      console.error('[addActivity] GAS書き込み失敗:', e);
+    });
   }
 
   function formatActivityTime(isoStr) {
@@ -1860,10 +1905,10 @@
   function detectActOperation(a) {
     var txt = a.text || '';
     var t   = a.type || '';
-    if (txt.indexOf('完了') !== -1 || t === 'done') return 'complete';
-    if (txt.indexOf('追加') !== -1 || txt.indexOf('登録') !== -1 || t.indexOf('created') !== -1) return 'add';
-    if (txt.indexOf('更新') !== -1 || t.indexOf('updated') !== -1 || t.indexOf('changed') !== -1) return 'update';
-    if (txt.indexOf('削除') !== -1 || t.indexOf('deleted') !== -1) return 'delete';
+    if (txt.indexOf('完了') !== -1 || t === 'done' || t === '完了') return 'complete';
+    if (txt.indexOf('追加') !== -1 || txt.indexOf('登録') !== -1 || t.indexOf('created') !== -1 || t === '追加') return 'add';
+    if (txt.indexOf('更新') !== -1 || t.indexOf('updated') !== -1 || t.indexOf('changed') !== -1 || t === '更新' || t === 'ステータス変更') return 'update';
+    if (txt.indexOf('削除') !== -1 || t.indexOf('deleted') !== -1 || t === '削除') return 'delete';
     return 'other';
   }
 
@@ -1878,7 +1923,6 @@
     list.innerHTML = acts.map(function(a) {
       var op = detectActOperation(a);
       var dotColor = OP_DOT_COLOR[op] || OP_DOT_COLOR.other;
-      console.log('[activity] type=' + a.type + ', op=' + op + ', color=' + dotColor + ', text=' + a.text);
       return '<li class="activity-item">' +
         '<span class="activity-dot" style="background:' + dotColor + ';"></span>' +
         '<span class="activity-text">' + esc(a.text) + '</span>' +
@@ -2130,7 +2174,8 @@
       fetchRecordsFromSheet(),
       fetchPayrollRecordsFromSheet(),
       fetchClientsFromSheet(),
-      fetchInquiriesFromSheet()
+      fetchInquiriesFromSheet(),
+      fetchActivityLog()
     ]).then(function() {
       renderTasks();
       updateAllStats();
@@ -2140,6 +2185,7 @@
       updateClientStat();
       renderInquiryList();
       updateInquiryStat();
+      renderActivityList();
     });
   }
 
@@ -5661,7 +5707,8 @@
     fetchRecordsFromSheet(),
     fetchPayrollRecordsFromSheet(),
     fetchClientsFromSheet(),
-    fetchInquiriesFromSheet()
+    fetchInquiriesFromSheet(),
+    fetchActivityLog()
   ]).then(function() {
     console.log('[初期化] Promise.all 完了（全シート取得済み）');
     console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');
@@ -5676,6 +5723,7 @@
     try { renderInquiryList(); } catch(e) { console.error('[初期化] renderInquiryList エラー:', e); }
     try { updateInquiryStat(); } catch(e) { console.error('[初期化] updateInquiryStat エラー:', e); }
     try { renderTimeSummary(); } catch(e) { console.error('[初期化] renderTimeSummary エラー:', e); }
+    try { renderActivityList(); } catch(e) { console.error('[初期化] renderActivityList エラー:', e); }
   }).catch(function(e) {
     console.error('[初期化] データ取得でエラー:', e);
   });
