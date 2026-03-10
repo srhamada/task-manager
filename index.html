@@ -1119,8 +1119,6 @@
         </div>
         <button class="btn btn-secondary" style="font-size:0.82rem;padding:5px 14px;white-space:nowrap;" onclick="exportClientCSV('payroll')">クライアント別CSV</button>
       </div>
-      <div id="payroll-filter-test" style="background:#ffe0e0;padding:8px;margin-bottom:8px;border:2px solid red;">フィルタUIテスト（給与計算記録）</div>
-      <select id="payrollClientFilter" style="margin-bottom:8px;"><option>テスト選択肢</option></select>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
         <select id="payroll-filter-client" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
           <option value="">クライアント：すべて</option>
@@ -1130,6 +1128,13 @@
         </select>
         <select id="payroll-filter-assignee" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
           <option value="">担当者：すべて</option>
+        </select>
+        <select id="payrollPeriodFilter" onchange="renderPayrollRecord()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">期間：すべて</option>
+          <option value="thisMonth">今月</option>
+          <option value="lastMonth">先月</option>
+          <option value="last3Months">過去3か月</option>
+          <option value="thisYear">今年</option>
         </select>
         <button class="btn btn-secondary" style="font-size:0.78rem;padding:3px 10px;" onclick="resetListFilters('payroll')">リセット</button>
       </div>
@@ -1168,8 +1173,6 @@
         </div>
         <button class="btn btn-secondary" style="font-size:0.82rem;padding:5px 14px;white-space:nowrap;" onclick="exportClientCSV('done')">クライアント別CSV</button>
       </div>
-      <div id="done-filter-test" style="background:#e0ffe0;padding:8px;margin-bottom:8px;border:2px solid green;">フィルタUIテスト（完了一覧）</div>
-      <select id="doneClientFilter" style="margin-bottom:8px;"><option>テスト選択肢</option></select>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
         <select id="done-filter-client" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
           <option value="">クライアント：すべて</option>
@@ -1179,6 +1182,13 @@
         </select>
         <select id="done-filter-assignee" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
           <option value="">担当者：すべて</option>
+        </select>
+        <select id="donePeriodFilter" onchange="renderDoneList()" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <option value="">期間：すべて</option>
+          <option value="thisMonth">今月</option>
+          <option value="lastMonth">先月</option>
+          <option value="last3Months">過去3か月</option>
+          <option value="thisYear">今年</option>
         </select>
         <button class="btn btn-secondary" style="font-size:0.78rem;padding:3px 10px;" onclick="resetListFilters('done')">リセット</button>
       </div>
@@ -1728,7 +1738,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v17 (フィルタUIテスト)');
+  console.log('[app] コードバージョン: 2026-03-10-v18 (期間フィルタ追加)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -3014,11 +3024,40 @@
     var clientVal   = (document.getElementById(prefix + '-filter-client')   || {}).value || '';
     var categoryVal = (document.getElementById(prefix + '-filter-category') || {}).value || '';
     var assigneeVal = (document.getElementById(prefix + '-filter-assignee') || {}).value || '';
+    var periodFilterId = prefix === 'done' ? 'donePeriodFilter' : prefix === 'payroll' ? 'payrollPeriodFilter' : '';
+    var periodVal = periodFilterId ? ((document.getElementById(periodFilterId) || {}).value || '') : '';
+
+    // 期間判定用の基準値を事前計算
+    var now = new Date();
+    var thisYear = now.getFullYear();
+    var thisMonth = now.getMonth(); // 0-based
+    var periodStart = null;
+    var periodEnd = null;
+    if (periodVal === 'thisMonth') {
+      periodStart = new Date(thisYear, thisMonth, 1);
+      periodEnd = new Date(thisYear, thisMonth + 1, 0, 23, 59, 59);
+    } else if (periodVal === 'lastMonth') {
+      periodStart = new Date(thisYear, thisMonth - 1, 1);
+      periodEnd = new Date(thisYear, thisMonth, 0, 23, 59, 59);
+    } else if (periodVal === 'last3Months') {
+      periodStart = new Date(thisYear, thisMonth - 2, 1);
+      periodEnd = new Date(thisYear, thisMonth + 1, 0, 23, 59, 59);
+    } else if (periodVal === 'thisYear') {
+      periodStart = new Date(thisYear, 0, 1);
+      periodEnd = new Date(thisYear, 11, 31, 23, 59, 59);
+    }
 
     return items.filter(function(t) {
       if (clientVal && (t.client || '') !== clientVal) return false;
       if (categoryVal && (t.category || '') !== categoryVal) return false;
       if (assigneeVal && (t.assignee || '') !== assigneeVal) return false;
+      if (periodStart) {
+        var dateStr = t.recordDate || t.due || '';
+        if (!dateStr) return false;
+        var rd = new Date(dateStr);
+        if (isNaN(rd.getTime())) return false;
+        if (rd < periodStart || rd > periodEnd) return false;
+      }
       if (q) {
         var haystack = ((t.client || '') + ' ' + (t.text || '') + ' ' + (t.category || '')).toLowerCase();
         if (haystack.indexOf(q) === -1) return false;
@@ -3034,6 +3073,8 @@
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
+    var periodId = prefix === 'done' ? 'donePeriodFilter' : prefix === 'payroll' ? 'payrollPeriodFilter' : '';
+    if (periodId) { var pe = document.getElementById(periodId); if (pe) pe.value = ''; }
     var search = document.getElementById(prefix === 'done' ? 'done-search' : prefix === 'payroll' ? 'payroll-record-search' : '');
     if (search) search.value = '';
     if (prefix === 'done') renderDoneList();
