@@ -249,9 +249,17 @@
     /* ダッシュボード右カラム下段サブグリッド */
     .dash-sub-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      align-items: stretch;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+    .dash-sub-grid #quick-msg-card {
+      max-width: 240px;
+    }
+    .dash-sub-grid .busy-season-card {
+      max-width: 160px;
+      padding: 8px 12px;
+      white-space: normal;
     }
     /* 算定年更カード（付箋風） */
     .busy-season-card {
@@ -1771,7 +1779,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v41 (右カラム上下分割)');
+  console.log('[app] コードバージョン: 2026-03-11-v42 (下段カード幅制限)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
