@@ -5,12 +5,75 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>社労士業務管理ツール</title>
   <style>
+    /* ===== テーマ CSS変数 ===== */
+    :root {
+      --bg: #f5f7f5;
+      --text: #263326;
+      --text-sub: #6a8a6e;
+      --text-muted: #8aaa8e;
+      --sidebar-bg: #e8f4e8;
+      --sidebar-text: #1a3320;
+      --sidebar-border: #c8e0c8;
+      --sidebar-nav: #2a4a2e;
+      --accent: #4caf50;
+      --accent-hover: #43a047;
+      --btn-secondary-bg: #f4f7f4;
+      --btn-secondary-text: #2e5a32;
+      --btn-secondary-border: #dde5dd;
+      --card-border: #e4e8e4;
+      --table-header-bg: #f5f7f5;
+      --table-header-text: #3a5040;
+      --table-border: #dde5dd;
+      --input-border: #dde5dd;
+      --row-hover: #f8fbf8;
+    }
+    [data-theme="yellow"] {
+      --bg: #fefcf5; --text: #3d3520; --text-sub: #8a7e5e; --text-muted: #b0a888;
+      --sidebar-bg: #f5ecd0; --sidebar-text: #3d3520; --sidebar-border: #e0d5a8;
+      --sidebar-nav: #5a4e30; --accent: #d4a017; --accent-hover: #c49412;
+      --btn-secondary-bg: #faf5e4; --btn-secondary-text: #5a4e30; --btn-secondary-border: #e0d5a8;
+      --card-border: #e8dfc0; --table-header-bg: #faf5e4; --table-header-text: #5a4e30;
+      --table-border: #e0d5a8; --input-border: #e0d5a8; --row-hover: #fdf8eb;
+    }
+    [data-theme="blue"] {
+      --bg: #f4f7fb; --text: #1e2d3d; --text-sub: #5a7a9e; --text-muted: #8aa4be;
+      --sidebar-bg: #dce8f4; --sidebar-text: #1e2d3d; --sidebar-border: #b8cee0;
+      --sidebar-nav: #2a4a6e; --accent: #3b82c4; --accent-hover: #2e6faa;
+      --btn-secondary-bg: #edf2f8; --btn-secondary-text: #2a4a6e; --btn-secondary-border: #c4d6e8;
+      --card-border: #d0dce8; --table-header-bg: #edf2f8; --table-header-text: #2a4a6e;
+      --table-border: #c4d6e8; --input-border: #c4d6e8; --row-hover: #f0f5fa;
+    }
+    [data-theme="orange"] {
+      --bg: #fdf7f3; --text: #3d2a1e; --text-sub: #9e7a5a; --text-muted: #bea888;
+      --sidebar-bg: #f5e6d0; --sidebar-text: #3d2a1e; --sidebar-border: #e0caa8;
+      --sidebar-nav: #5a3e28; --accent: #e07830; --accent-hover: #cc6a28;
+      --btn-secondary-bg: #faf0e4; --btn-secondary-text: #5a3e28; --btn-secondary-border: #e0caa8;
+      --card-border: #e8d8c0; --table-header-bg: #faf0e4; --table-header-text: #5a3e28;
+      --table-border: #e0caa8; --input-border: #e0caa8; --row-hover: #fdf4eb;
+    }
+    [data-theme="purple"] {
+      --bg: #f7f4fb; --text: #2d1e3d; --text-sub: #7a5a9e; --text-muted: #a488be;
+      --sidebar-bg: #e8dcf4; --sidebar-text: #2d1e3d; --sidebar-border: #ceb8e0;
+      --sidebar-nav: #4a2a6e; --accent: #8e5abf; --accent-hover: #7a4aaa;
+      --btn-secondary-bg: #f2edf8; --btn-secondary-text: #4a2a6e; --btn-secondary-border: #d4c4e8;
+      --card-border: #dcd0e8; --table-header-bg: #f2edf8; --table-header-text: #4a2a6e;
+      --table-border: #d4c4e8; --input-border: #d4c4e8; --row-hover: #f5f0fa;
+    }
+    [data-theme="brown"] {
+      --bg: #f8f5f2; --text: #3a2e24; --text-sub: #8a7a6a; --text-muted: #b0a494;
+      --sidebar-bg: #ebe0d4; --sidebar-text: #3a2e24; --sidebar-border: #d4c4b0;
+      --sidebar-nav: #5a4a3a; --accent: #a07850; --accent-hover: #8e6a44;
+      --btn-secondary-bg: #f4efe8; --btn-secondary-text: #5a4a3a; --btn-secondary-border: #d4c4b0;
+      --card-border: #ddd0c0; --table-header-bg: #f4efe8; --table-header-text: #5a4a3a;
+      --table-border: #d4c4b0; --input-border: #d4c4b0; --row-hover: #f6f2ed;
+    }
+
     /* ===== リセット & ベース ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
-      background: #f5f7f5;
-      color: #263326;
+      background: var(--bg);
+      color: var(--text);
       display: flex;
       min-height: 100vh;
     }
@@ -19,7 +82,7 @@
     .sidebar {
       width: 230px;
       min-height: 100vh;
-      background: #e8f4e8;
+      background: var(--sidebar-bg);
       display: flex;
       flex-direction: column;
       padding: 28px 16px;
@@ -31,17 +94,17 @@
     .sidebar-logo {
       font-size: 1rem;
       font-weight: 700;
-      color: #1a3320;
+      color: var(--sidebar-text);
       margin-bottom: 32px;
       text-align: center;
       line-height: 1.5;
       padding-bottom: 16px;
-      border-bottom: 1px solid #c8e0c8;
+      border-bottom: 1px solid var(--sidebar-border);
     }
     .sidebar-logo span {
       display: block;
       font-size: 0.68rem;
-      color: #5a7a5e;
+      color: var(--text-sub);
       font-weight: 400;
       margin-top: 5px;
       letter-spacing: 0.02em;
@@ -54,7 +117,7 @@
       border-radius: 10px;
       cursor: pointer;
       font-size: 0.88rem;
-      color: #2a4a2e;
+      color: var(--sidebar-nav);
       font-weight: 500;
       transition: background 0.18s, color 0.18s;
       margin-bottom: 4px;
@@ -63,7 +126,7 @@
     .nav-item:hover { background: rgba(255,255,255,0.6); }
     .nav-item.active {
       background: #ffffff;
-      color: #1a3320;
+      color: var(--sidebar-text);
       font-weight: 600;
       box-shadow: 0 2px 6px rgba(0,0,0,0.09);
     }
@@ -86,11 +149,11 @@
     .page-header h1 {
       font-size: 1.55rem;
       font-weight: 700;
-      color: #1a3320;
+      color: var(--sidebar-text);
     }
     .page-header p {
       font-size: 0.87rem;
-      color: #6a8a6e;
+      color: var(--text-sub);
       margin-top: 5px;
     }
 
@@ -100,7 +163,7 @@
       border-radius: 14px;
       padding: 24px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 14px rgba(0,0,0,0.05);
-      border: 1px solid #e4e8e4;
+      border: 1px solid var(--card-border);
     }
 
     /* ===== グリッド ===== */
@@ -114,13 +177,13 @@
       border-radius: 14px;
       padding: 22px 24px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 14px rgba(0,0,0,0.05);
-      border: 1px solid #e4e8e4;
+      border: 1px solid var(--card-border);
       border-left: 5px solid;
       display: flex;
       flex-direction: column;
       gap: 6px;
     }
-    .stat-card.purple { border-color: #4caf50; }
+    .stat-card.purple { border-color: var(--accent); }
     .stat-card.blue   { border-color: #26a69a; }
     .stat-card.green  { border-color: #f59e0b; }
     .stat-card.green .stat-label { color: #d97706; }
@@ -128,14 +191,14 @@
     .stat-card.amber  { border-color: #f97316; }
     .stat-card.amber .stat-label { color: #ea580c; }
     .stat-card.amber .stat-value { color: #ea580c; }
-    .stat-label { font-size: 0.8rem; color: #6a8a6e; font-weight: 500; }
-    .stat-value { font-size: 2rem; font-weight: 700; color: #1a3320; }
-    .stat-sub   { font-size: 0.78rem; color: #8aaa8e; }
+    .stat-label { font-size: 0.8rem; color: var(--text-sub); font-weight: 500; }
+    .stat-value { font-size: 2rem; font-weight: 700; color: var(--sidebar-text); }
+    .stat-sub   { font-size: 0.78rem; color: var(--text-muted); }
 
     .section-title {
       font-size: 0.97rem;
       font-weight: 700;
-      color: #1a3320;
+      color: var(--sidebar-text);
       margin-bottom: 14px;
     }
 
@@ -148,9 +211,9 @@
       padding: 11px 14px;
       border-radius: 10px;
       background: #ffffff;
-      border: 1px solid #e4e8e4;
+      border: 1px solid var(--card-border);
       font-size: 0.88rem;
-      color: #263326;
+      color: var(--text);
     }
     .todo-badge {
       display: inline-block;
@@ -199,15 +262,15 @@
     .search-bar input {
       flex: 1;
       padding: 10px 16px;
-      border: 1.5px solid #dde5dd;
+      border: 1.5px solid var(--input-border);
       border-radius: 10px;
       font-size: 0.9rem;
-      color: #263326;
+      color: var(--text);
       background: #fff;
       outline: none;
       transition: border-color 0.18s;
     }
-    .search-bar input:focus { border-color: #4caf50; }
+    .search-bar input:focus { border-color: var(--accent); }
     .btn {
       padding: 10px 20px;
       border: none;
@@ -218,27 +281,27 @@
       transition: background 0.18s, transform 0.1s;
     }
     .btn:active { transform: scale(0.97); }
-    .btn-primary  { background: #4caf50; color: #fff; }
-    .btn-primary:hover  { background: #43a047; }
-    .btn-secondary { background: #f4f7f4; color: #2e5a32; border: 1.5px solid #dde5dd; }
-    .btn-secondary:hover { background: #eaeeea; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:hover  { background: var(--accent-hover); }
+    .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); border: 1.5px solid var(--btn-secondary-border); }
+    .btn-secondary:hover { background: var(--row-hover); }
 
     .client-table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
     th {
       text-align: left;
       padding: 12px 16px;
-      background: #f5f7f5;
-      color: #3a5040;
+      background: var(--table-header-bg);
+      color: var(--table-header-text);
       font-weight: 600;
-      border-bottom: 2px solid #dde5dd;
+      border-bottom: 2px solid var(--table-border);
     }
     td {
       padding: 13px 16px;
       border-bottom: 1px solid #eeeeee;
-      color: #263326;
+      color: var(--text);
     }
-    tr:hover td { background: #f8fbf8; }
+    tr:hover td { background: var(--row-hover); }
     .status-badge {
       display: inline-block;
       padding: 3px 12px;
@@ -486,9 +549,32 @@
 
     /* ===== レスポンシブ ===== */
     /* ハンバーガーボタン（スマホ時のみ表示） */
+    /* テーマ切替ボタン */
+    .theme-toggle-btn {
+      position: fixed; top: 10px; right: 16px; z-index: 200;
+      background: #fff; border: 1px solid var(--card-border); border-radius: 8px;
+      font-size: 0.78rem; padding: 5px 10px; cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08); user-select: none;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .theme-toggle-btn:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+    .theme-palette {
+      display: none; position: fixed; top: 44px; right: 16px; z-index: 201;
+      background: #fff; border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .theme-palette.open { display: flex; flex-wrap: wrap; gap: 6px; max-width: 200px; }
+    .theme-swatch {
+      width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+      border: 2px solid transparent; transition: transform 0.12s, border-color 0.12s;
+      display: flex; align-items: center; justify-content: center; font-size: 0.6rem;
+    }
+    .theme-swatch:hover { transform: scale(1.12); }
+    .theme-swatch.active { border-color: #333; }
+
     .mobile-menu-btn {
       display: none; position: fixed; top: 10px; left: 10px; z-index: 200;
-      background: #e8f4e8; border: 1px solid #c8ddc8; border-radius: 8px;
+      background: var(--sidebar-bg); border: 1px solid var(--sidebar-border); border-radius: 8px;
       font-size: 1.4rem; width: 40px; height: 40px; cursor: pointer;
       align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
@@ -602,6 +688,17 @@
 <body>
 
 <!-- ハンバーガーメニューボタン（スマホ用） -->
+<!-- テーマ切替 -->
+<button class="theme-toggle-btn" onclick="toggleThemePalette()">🎨 配色</button>
+<div class="theme-palette" id="theme-palette">
+  <div class="theme-swatch active" style="background:#e8f4e8;" onclick="setTheme('')" title="初期カラー">緑</div>
+  <div class="theme-swatch" style="background:#f5ecd0;" onclick="setTheme('yellow')" title="黄色系">黄</div>
+  <div class="theme-swatch" style="background:#dce8f4;" onclick="setTheme('blue')" title="青系">青</div>
+  <div class="theme-swatch" style="background:#f5e6d0;" onclick="setTheme('orange')" title="オレンジ系">橙</div>
+  <div class="theme-swatch" style="background:#e8dcf4;" onclick="setTheme('purple')" title="紫系">紫</div>
+  <div class="theme-swatch" style="background:#ebe0d4;" onclick="setTheme('brown')" title="茶色系">茶</div>
+</div>
+
 <button class="mobile-menu-btn" onclick="toggleMobileMenu()">≡</button>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleMobileMenu()"></div>
 
@@ -1783,7 +1880,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v43 (今日の予定カード追加)');
+  console.log('[app] コードバージョン: 2026-03-11-v44 (テーマ切替機能)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -1809,6 +1906,42 @@
   }
 
   // モバイルメニュー開閉
+  // ===== テーマ切替 =====
+  function toggleThemePalette() {
+    var p = document.getElementById('theme-palette');
+    if (p) p.classList.toggle('open');
+  }
+  function setTheme(name) {
+    if (name) {
+      document.documentElement.setAttribute('data-theme', name);
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('appTheme', name);
+    // スウォッチのactive更新
+    document.querySelectorAll('.theme-swatch').forEach(function(el) {
+      var swatchTheme = (el.getAttribute('onclick') || '').match(/setTheme\('([^']*)'\)/);
+      var t = swatchTheme ? swatchTheme[1] : '';
+      el.classList.toggle('active', t === name);
+    });
+    // パレットを閉じる
+    var p = document.getElementById('theme-palette');
+    if (p) p.classList.remove('open');
+  }
+  // 初期テーマ復元
+  (function() {
+    var saved = localStorage.getItem('appTheme');
+    if (saved) setTheme(saved);
+  })();
+  // パレット外クリックで閉じる
+  document.addEventListener('click', function(e) {
+    var p = document.getElementById('theme-palette');
+    var btn = document.querySelector('.theme-toggle-btn');
+    if (p && p.classList.contains('open') && !p.contains(e.target) && !btn.contains(e.target)) {
+      p.classList.remove('open');
+    }
+  });
+
   function toggleMobileMenu() {
     var sb = document.getElementById('sidebar');
     var ov = document.getElementById('sidebar-overlay');
