@@ -1880,7 +1880,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v44 (テーマ切替機能)');
+  console.log('[app] コードバージョン: 2026-03-11-v45 (給与計算カード件数ロジック)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -3658,11 +3658,37 @@
   }
 
   function updatePayrollStat() {
-    var r = countThisMonth(PAYROLL_CATEGORIES);
     var countEl = document.getElementById('stat-payroll-count');
     var doneEl  = document.getElementById('stat-payroll-done');
-    if (countEl) countEl.textContent = r.total + '件';
-    if (doneEl)  doneEl.textContent  = '完了済み ' + r.done + '件';
+
+    var now = new Date(); now.setHours(0,0,0,0);
+    var year = now.getFullYear();
+    var month = now.getMonth(); // 0-indexed
+    var mm = String(month + 1).padStart(2, '0');
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var todayStr = formatDateStr(now);
+
+    var total = 0, done = 0;
+    loadClients().forEach(function(c) {
+      // I列「給与計算」が check or yes のクライアントのみ対象
+      var pv = String(c.payroll || '').toLowerCase();
+      if (pv !== 'check' && pv !== 'yes') return;
+      if (c.status !== 'active') return;
+      total++;
+
+      // K列「支払日」から今月の支払日を算出
+      var payDay = parseInt(c.payrollPayDay, 10);
+      if (!payDay || payDay < 1 || payDay > daysInMonth) return;
+      var originalDate = year + '-' + mm + '-' + String(payDay).padStart(2, '0');
+      // 営業日前補正（土日祝・事務所休日なら前営業日へ）
+      var actualDate = isNonBusinessDay(originalDate) ? getPreviousBusinessDay(originalDate) : originalDate;
+      // 補正後の支払日が今日以前なら完了済み
+      if (actualDate <= todayStr) done++;
+    });
+
+    var remaining = total - done;
+    if (countEl) countEl.textContent = remaining + '件';
+    if (doneEl)  doneEl.textContent  = '完了済み ' + done + '件';
   }
 
   function updateUrgentStat() {
