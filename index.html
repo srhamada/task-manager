@@ -1880,7 +1880,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v46 (日付JST統一)');
+  console.log('[app] コードバージョン: 2026-03-11-v47 (算定年更日付表示修正)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -1891,6 +1891,15 @@
     var m = String(d.getMonth() + 1).padStart(2, '0');
     var day = String(d.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + day;
+  }
+  function formatDateSlash(value) {
+    if (!value) return '';
+    var d = (value instanceof Date) ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '/' + m + '/' + day;
   }
   function formatMonthJST(value) {
     if (!value) return '';
@@ -5506,7 +5515,9 @@
       var idx = row._idx;
       // 工程セル
       var stepCells = BS_STEP_COLS.map(function(col) {
-        return '<td><input data-idx="' + idx + '" data-col="' + col + '" value="' + esc(row[col] || '') + '" onchange="updateBsCell(this)" /></td>';
+        var v = row[col] || '';
+        if (v && v.indexOf('T') !== -1) v = formatDateSlash(v);
+        return '<td><input data-idx="' + idx + '" data-col="' + col + '" value="' + esc(v) + '" onchange="updateBsCell(this)" /></td>';
       }).join('');
 
       return '<tr>' +
@@ -5518,7 +5529,7 @@
         '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="顧問先名" value="' + esc(row['顧問先名'] || '') + '" onchange="updateBsCell(this)" /></td>' +
         stepCells +
         '<td class="bs-comment-cell"><input data-idx="' + idx + '" data-col="コメント" value="' + esc(row['コメント'] || '') + '" onchange="updateBsCell(this)" /></td>' +
-        '<td style="font-size:0.75rem;color:#9e9e9e;">' + esc((row['更新日'] || '').slice(0, 16)) + '</td>' +
+        '<td style="font-size:0.75rem;color:#9e9e9e;">' + esc(row['更新日'] ? formatDateSlash(row['更新日']) : '') + '</td>' +
         '</tr>';
     }).join('');
   }
