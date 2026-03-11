@@ -123,7 +123,8 @@ function handleGetConsultTodos_() {
 // --------------- doPost: アクション振り分け ---------------
 function doPost(e) {
   try {
-    var rawContents = e.postData.contents;
+    // URLSearchParams(data=JSON) または application/json の両方に対応
+    var rawContents = (e.parameter && e.parameter.data) ? e.parameter.data : e.postData.contents;
     Logger.log('[doPost] ★受信rawデータ: ' + rawContents);
     var data = JSON.parse(rawContents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();

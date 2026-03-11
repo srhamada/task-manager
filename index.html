@@ -1766,7 +1766,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-10-v38 (メッセージ保存修正)');
+  console.log('[app] コードバージョン: 2026-03-11-v39 (メッセージCORS修正)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2445,8 +2445,7 @@
 
     fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: new URLSearchParams({ data: JSON.stringify(payload) })
     })
     .then(function(res) { return res.json(); })
     .then(function(data) {
@@ -2468,8 +2467,7 @@
 
     fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'deleteMessage', id: id })
+      body: new URLSearchParams({ data: JSON.stringify({ action: 'deleteMessage', id: id }) })
     })
     .then(function(res) { return res.json(); })
     .then(function(data) {
