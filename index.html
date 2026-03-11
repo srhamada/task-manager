@@ -246,6 +246,13 @@
       font-size: 0.75rem;
       font-weight: 600;
     }
+    /* ダッシュボード右カラム下段サブグリッド */
+    .dash-sub-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
     /* 算定年更カード（付箋風） */
     .busy-season-card {
       background: linear-gradient(135deg, #fffde7 0%, #fff9c4 100%);
@@ -520,6 +527,7 @@
       }
 
       .busy-season-card { margin-left: 0; }
+      .dash-sub-grid { grid-template-columns: 1fr !important; }
 
       /* カード余白 */
       .card { padding: 14px 12px; }
@@ -734,33 +742,36 @@
         <ul id="todo-list" class="todo-list"></ul>
       </div>
       <div style="display:flex;flex-direction:column;gap:16px;">
-        <!-- 一言メッセージ -->
-        <div class="card" id="quick-msg-card" style="padding:12px 14px;">
-          <div class="section-title" style="margin-bottom:8px;font-size:0.82rem;">💬 一言メッセージ</div>
-          <div style="display:flex;gap:4px;margin-bottom:8px;align-items:center;">
-            <select id="msg-to" style="font-size:0.74rem;padding:3px 4px;border:1px solid #ccc;border-radius:4px;flex-shrink:0;">
-              <option value="濱田">→濱田</option>
-              <option value="髙嵜">→髙嵜</option>
-            </select>
-            <input id="msg-text" type="text" class="form-input" placeholder="メッセージを入力…"
-              style="flex:1;padding:4px 6px;font-size:0.78rem;" onkeydown="if(event.key==='Enter')sendQuickMsg()" />
-            <button onclick="sendQuickMsg()" class="btn btn-primary" style="padding:3px 8px;font-size:0.74rem;white-space:nowrap;flex-shrink:0;">送信</button>
-          </div>
-          <div id="msg-list">
-            <div style="color:#bbb;text-align:center;padding:4px 0;font-size:0.74rem;">メッセージなし</div>
-          </div>
-        </div>
-        <!-- 最近のアクティビティ -->
+        <!-- 最近のアクティビティ（主役） -->
         <div class="card">
           <div class="section-title">最近のアクティビティ</div>
           <ul id="activity-list" class="activity-list">
             <li style="padding:12px 0;color:#9e9e9e;font-size:0.86rem;text-align:center;">まだ操作履歴がありません</li>
           </ul>
         </div>
-        <!-- 算定年更管理 -->
-        <div onclick="showPageByName('busy-season')" class="busy-season-card" style="text-align:center;">
-          <div class="busy-season-title">📊 算定年更管理</div>
-          <div class="busy-season-body">今年の算定年更はこちら☆</div>
+        <!-- 下段: 一言メッセージ + 算定年更管理 -->
+        <div class="dash-sub-grid">
+          <!-- 一言メッセージ -->
+          <div class="card" id="quick-msg-card" style="padding:10px 12px;">
+            <div class="section-title" style="margin-bottom:6px;font-size:0.78rem;">💬 一言メッセージ</div>
+            <div style="display:flex;gap:3px;margin-bottom:6px;align-items:center;">
+              <select id="msg-to" style="font-size:0.72rem;padding:2px 3px;border:1px solid #ccc;border-radius:4px;flex-shrink:0;">
+                <option value="濱田">→濱田</option>
+                <option value="髙嵜">→髙嵜</option>
+              </select>
+              <input id="msg-text" type="text" class="form-input" placeholder="メッセージを入力…"
+                style="flex:1;padding:3px 5px;font-size:0.74rem;" onkeydown="if(event.key==='Enter')sendQuickMsg()" />
+              <button onclick="sendQuickMsg()" class="btn btn-primary" style="padding:2px 7px;font-size:0.72rem;white-space:nowrap;flex-shrink:0;">送信</button>
+            </div>
+            <div id="msg-list">
+              <div style="color:#bbb;text-align:center;padding:4px 0;font-size:0.72rem;">メッセージなし</div>
+            </div>
+          </div>
+          <!-- 算定年更管理 -->
+          <div onclick="showPageByName('busy-season')" class="busy-season-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0;">
+            <div class="busy-season-title">📊 算定年更管理</div>
+            <div class="busy-season-body">今年の算定年更はこちら☆</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1760,7 +1771,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v40 (ダッシュボードレイアウト再構成)');
+  console.log('[app] コードバージョン: 2026-03-11-v41 (右カラム上下分割)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2398,7 +2409,7 @@
     var el = document.getElementById('msg-list');
     if (!el) return;
     if (!quickMsgCache.length) {
-      el.innerHTML = '<div style="color:#bbb;text-align:center;padding:4px 0;font-size:0.74rem;">メッセージなし</div>';
+      el.innerHTML = '<div style="color:#bbb;text-align:center;padding:4px 0;font-size:0.72rem;">メッセージなし</div>';
       return;
     }
     var myId = localStorage.getItem('myMemberId') || 'hamada';
@@ -2412,9 +2423,9 @@
       var isMine = msg.from === myName;
       var bg = isToMe ? '#FFF8E1' : 'transparent';
       var delBtn = isMine ? " <span style=\"cursor:pointer;color:#bbb;font-size:0.68rem;\" title=\"削除\" onclick=\"deleteQuickMsg('" + msg.id + "')\">×</span>" : '';
-      html += '<div style="padding:5px 4px;border-bottom:1px solid #f0f0f0;background:' + bg + ';border-radius:2px;">';
-      html += '<div style="font-size:0.72rem;color:#999;">' + esc(msg.from) + '→' + esc(msg.to) + ' ' + (msg.ts || '').slice(5) + delBtn + '</div>';
-      html += '<div style="font-size:0.80rem;margin-top:2px;">' + esc(msg.text) + '</div>';
+      html += '<div style="padding:4px 2px;border-bottom:1px solid #f0f0f0;background:' + bg + ';border-radius:2px;">';
+      html += '<div style="font-size:0.68rem;color:#999;">' + esc(msg.from) + '→' + esc(msg.to) + ' ' + (msg.ts || '').slice(5) + delBtn + '</div>';
+      html += '<div style="font-size:0.76rem;margin-top:1px;">' + esc(msg.text) + '</div>';
       html += '</div>';
     });
     el.innerHTML = html;
