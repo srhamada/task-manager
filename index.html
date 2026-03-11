@@ -356,11 +356,11 @@
     .bs-group-nendo { background: #fff3e0 !important; color: #e65100; }
     .bs-group-santei { background: #e3f2fd !important; color: #1565c0; }
     .bs-th-fixed { background: #e8f0e8 !important; }
-    .bs-th-step { min-width: 110px; width: 110px; }
-    .bs-step-cell { min-width: 110px; width: 110px; white-space: nowrap; cursor: pointer; }
-    .bs-step-cell.empty { color: transparent; }
-    .bs-step-cell .bs-date-display { display: block; width: 100%; padding: 2px; font-size: 0.82rem; }
-    .bs-step-cell input[type="date"] { min-width: 100px; }
+    .bs-th-step { width: 90px; min-width: 90px; max-width: 90px; }
+    .bs-step-cell { width: 90px; min-width: 90px; max-width: 90px; white-space: nowrap; cursor: pointer; }
+    .bs-step-cell.empty { }
+    .bs-step-cell .bs-date-display { display: block; width: 100%; padding: 2px; font-size: 0.78rem; }
+    .bs-step-cell input[type="text"] { width: 80px; font-size: 12px; padding: 2px 4px; border: 1px solid #ccc; text-align: center; }
     .bs-table tbody td { background: #fff; }
     .bs-table tbody tr:hover td { background: #f8fbf8; }
     .bs-table tbody td input,
@@ -1886,7 +1886,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v50 (算定年更日付セル空欄表示修正)');
+  console.log('[app] コードバージョン: 2026-03-11-v51 (算定年更Date完全廃止)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -1898,21 +1898,15 @@
     var day = String(d.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + day;
   }
-  function normalizeDateString(value) {
+  function normalizeDate(value) {
     if (!value) return '';
     var s = String(value).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.replace(/-/g, '/');
-    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s;
-    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10).replace(/-/g, '/');
-    return s;
-  }
-  function toDateInputValue(value) {
-    if (!value) return '';
-    var s = String(value).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, '-');
-    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
-    return '';
+    var m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return '';
+    var y = m[1];
+    var mm = String(parseInt(m[2], 10)).padStart(2, '0');
+    var dd = String(parseInt(m[3], 10)).padStart(2, '0');
+    return y + '/' + mm + '/' + dd;
   }
   function formatMonthJST(value) {
     if (!value) return '';
@@ -5529,7 +5523,7 @@
       // 工程セル
       var stepCells = BS_STEP_COLS.map(function(col) {
         var v = row[col] || '';
-        var display = normalizeDateString(v);
+        var display = normalizeDate(v);
         var cls = 'bs-step-cell' + (display ? '' : ' empty');
         return '<td class="' + cls + '" data-idx="' + idx + '" data-col="' + col + '" onclick="bsDateEdit(this)"><span class="bs-date-display">' + esc(display) + '</span></td>';
       }).join('');
@@ -5543,7 +5537,7 @@
         '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="顧問先名" value="' + esc(row['顧問先名'] || '') + '" onchange="updateBsCell(this)" /></td>' +
         stepCells +
         '<td class="bs-comment-cell"><input data-idx="' + idx + '" data-col="コメント" value="' + esc(row['コメント'] || '') + '" onchange="updateBsCell(this)" /></td>' +
-        '<td class="bs-updated-cell">' + esc(normalizeDateString(row['更新日'])) + '</td>' +
+        '<td class="bs-updated-cell">' + esc(normalizeDate(row['更新日'])) + '</td>' +
         '</tr>';
     }).join('');
   }
@@ -5561,22 +5555,25 @@
     var idx = td.getAttribute('data-idx');
     var col = td.getAttribute('data-col');
     var raw = (busySeasonRows[idx] && busySeasonRows[idx][col]) || '';
-    var inputVal = toDateInputValue(raw);
-    td.innerHTML = '<input type="date" value="' + esc(inputVal) + '" />';
+    var currentDisplay = normalizeDate(raw);
+    td.innerHTML = '<input type="text" value="' + esc(currentDisplay) + '" placeholder="yyyy/mm/dd" />';
     var inp = td.querySelector('input');
     inp.focus();
+    inp.select();
     var done = false;
     function commit() {
       if (done) return;
       done = true;
-      var v = inp.value;
+      var v = normalizeDate(inp.value);
       if (busySeasonRows[idx]) busySeasonRows[idx][col] = v;
-      var display = normalizeDateString(v);
-      td.className = 'bs-step-cell' + (display ? '' : ' empty');
-      td.innerHTML = '<span class="bs-date-display">' + esc(display) + '</span>';
+      td.className = 'bs-step-cell' + (v ? '' : ' empty');
+      td.innerHTML = '<span class="bs-date-display">' + esc(v) + '</span>';
     }
-    inp.addEventListener('change', commit);
     inp.addEventListener('blur', commit);
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { done = true; var d = normalizeDate(raw); td.className = 'bs-step-cell' + (d ? '' : ' empty'); td.innerHTML = '<span class="bs-date-display">' + esc(d) + '</span>'; }
+    });
   }
 
   function loadActiveClientsIntoBusySeason() {

@@ -617,7 +617,12 @@ function handleGetBusySeasonRecords_(e) {
   for (var i = 1; i < data.length; i++) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
-      obj[headers[j]] = data[i][j];
+      var val = data[i][j];
+      // Date型はJST文字列に変換（JSON.stringifyのUTC変換を防止）
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy/MM/dd');
+      }
+      obj[headers[j]] = val;
     }
     // 年度フィルタ
     if (year && String(obj['年度']) !== year) continue;
@@ -682,7 +687,12 @@ function handleSaveBusySeasonRecords_(ss, data) {
   // シートをクリアして書き直し
   sheet.clearContents();
   if (allRows.length > 0) {
-    sheet.getRange(1, 1, allRows.length, headers.length).setValues(allRows);
+    var range = sheet.getRange(1, 1, allRows.length, headers.length);
+    // 日付列（D〜P: 4列目〜16列目）をテキスト形式にしてDate自動変換を防止
+    for (var ci = 3; ci <= 15; ci++) {
+      sheet.getRange(2, ci + 1, Math.max(allRows.length - 1, 1), 1).setNumberFormat('@');
+    }
+    range.setValues(allRows);
   }
 
   Logger.log('[saveBusySeason] 保存完了: 全' + (allRows.length - 1) + '行（今回' + newRows.length + '行）');
