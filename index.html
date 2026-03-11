@@ -356,7 +356,9 @@
     .bs-group-nendo { background: #fff3e0 !important; color: #e65100; }
     .bs-group-santei { background: #e3f2fd !important; color: #1565c0; }
     .bs-th-fixed { background: #e8f0e8 !important; }
-    .bs-th-step { min-width: 72px; }
+    .bs-th-step { min-width: 110px; width: 110px; }
+    .bs-step-cell { min-width: 110px; width: 110px; white-space: nowrap; }
+    .bs-step-cell input[type="date"] { min-width: 100px; }
     .bs-table tbody td { background: #fff; }
     .bs-table tbody tr:hover td { background: #f8fbf8; }
     .bs-table tbody td input,
@@ -1882,7 +1884,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v47 (算定年更日付表示修正)');
+  console.log('[app] コードバージョン: 2026-03-11-v48 (算定年更日付文字列ベース統一)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -1894,14 +1896,21 @@
     var day = String(d.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + day;
   }
-  function formatDateSlash(value) {
+  function normalizeDateString(value) {
     if (!value) return '';
-    var d = (value instanceof Date) ? value : new Date(value);
-    if (isNaN(d.getTime())) return '';
-    var y = d.getFullYear();
-    var m = String(d.getMonth() + 1).padStart(2, '0');
-    var day = String(d.getDate()).padStart(2, '0');
-    return y + '/' + m + '/' + day;
+    var s = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.replace(/-/g, '/');
+    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10).replace(/-/g, '/');
+    return s;
+  }
+  function toDateInputValue(value) {
+    if (!value) return '';
+    var s = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, '-');
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+    return '';
   }
   function formatMonthJST(value) {
     if (!value) return '';
@@ -5518,8 +5527,8 @@
       // 工程セル
       var stepCells = BS_STEP_COLS.map(function(col) {
         var v = row[col] || '';
-        if (v && v.indexOf('T') !== -1) v = formatDateSlash(v);
-        return '<td><input data-idx="' + idx + '" data-col="' + col + '" value="' + esc(v) + '" onchange="updateBsCell(this)" /></td>';
+        var displayVal = normalizeDateString(v) || v;
+        return '<td class="bs-step-cell"><input type="date" data-idx="' + idx + '" data-col="' + col + '" value="' + esc(toDateInputValue(v)) + '" onchange="updateBsCell(this)" /></td>';
       }).join('');
 
       return '<tr>' +
@@ -5531,7 +5540,7 @@
         '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="顧問先名" value="' + esc(row['顧問先名'] || '') + '" onchange="updateBsCell(this)" /></td>' +
         stepCells +
         '<td class="bs-comment-cell"><input data-idx="' + idx + '" data-col="コメント" value="' + esc(row['コメント'] || '') + '" onchange="updateBsCell(this)" /></td>' +
-        '<td class="bs-updated-cell">' + esc(row['更新日'] ? formatDateSlash(row['更新日']) : '') + '</td>' +
+        '<td class="bs-updated-cell">' + esc(normalizeDateString(row['更新日'])) + '</td>' +
         '</tr>';
     }).join('');
   }
