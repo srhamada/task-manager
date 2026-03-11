@@ -1880,7 +1880,33 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v45 (給与計算カード件数ロジック)');
+  console.log('[app] コードバージョン: 2026-03-11-v46 (日付JST統一)');
+
+  // ===== 日付ユーティリティ（JST・共通） =====
+  function formatDateJST(value) {
+    if (!value) return '';
+    var d = (value instanceof Date) ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+  function formatMonthJST(value) {
+    if (!value) return '';
+    var d = (value instanceof Date) ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  function formatDateTimeJST(value) {
+    if (!value) return '';
+    var d = (value instanceof Date) ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    return formatDateJST(d) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+  }
+  function todayJST() { return formatDateJST(new Date()); }
+  function thisMonthJST() { return formatMonthJST(new Date()); }
+
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2030,7 +2056,7 @@
 
     // ローカルキャッシュに即追加（即時UI反映用）
     activityCache.unshift({
-      ts: new Date().toISOString(),
+      ts: formatDateTimeJST(new Date()),
       type: opType,
       text: text
     });
@@ -2792,7 +2818,7 @@
       }).then(function(success) {
         if (success) {
           target.status = 'done';
-          target.recorded = new Date().toISOString();
+          target.recorded = formatDateTimeJST(new Date());
           saveTasks(loadTasks());
           addActivity('todo_status_changed', actText(target.client, target.text, ' を完了に変更'));
           return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
@@ -2831,7 +2857,7 @@
       var aVal = assigneeEl.value;
       assigneeName = ASSIGNEE_LABEL[aVal] || aVal || '';
     }
-    var now = new Date().toISOString().slice(0, 10);
+    var now = todayJST();
 
     var postData = {
       'クライアント': clientEl ? clientEl.value.trim() : '',
@@ -2974,7 +3000,7 @@
         if (success) {
           console.log('[commitEdit] 保存成功 → 記録済フラグセット → TODO一覧から除外');
           target.status = 'done';
-          target.recorded = new Date().toISOString();
+          target.recorded = formatDateTimeJST(new Date());
           saveTasks(loadTasks());
           addActivity('todo_updated', actText(editData.client || target.client, editData.text, ' を更新（完了）'));
           return refreshFromSheet().then(function() { refreshCalendarIfVisible(); });
@@ -3023,7 +3049,7 @@
     // 記録日を今日に初期化（空の場合のみ）
     var dateEl = document.getElementById('rec-date');
     if (dateEl && !dateEl.value) {
-      dateEl.value = new Date().toISOString().slice(0, 10);
+      dateEl.value = todayJST();
     }
     // カテゴリプルダウンを最新化（常に再構築）
     populateCategorySelects();
@@ -3034,7 +3060,7 @@
     if (msg) msg.style.display = 'none';
     // 集計月を今月に初期化
     var wtMonth = document.getElementById('wt-month');
-    if (wtMonth && !wtMonth.value) wtMonth.value = new Date().toISOString().slice(0, 7);
+    if (wtMonth && !wtMonth.value) wtMonth.value = thisMonthJST();
     // 集計顧問先プルダウン更新
     var wtClient = document.getElementById('wt-client');
     if (wtClient) {
@@ -3073,7 +3099,7 @@
     var assigneeVal = (document.getElementById('rec-assignee') || {}).value || '';
     var assigneeName = ASSIGNEE_LABEL[assigneeVal] || assigneeVal || '';
     var clientVal    = (document.getElementById('record-client') || {}).value || '';
-    var now = new Date().toISOString().slice(0, 10);
+    var now = todayJST();
 
     var postData = {
       'クライアント': clientVal,
@@ -3108,7 +3134,7 @@
   }
 
   function clearRecord() {
-    var today = new Date().toISOString().slice(0, 10);
+    var today = todayJST();
     ['rec-date', 'rec-title', 'rec-detail', 'rec-memo', 'rec-due',
      'rec-work-start', 'rec-work-end', 'rec-work-minutes'].forEach(function(id) {
       var el = document.getElementById(id);
@@ -3701,7 +3727,7 @@
     var overdue = 0, soon = 0;
     var tasks = loadTasks();
 
-    console.log('[updateUrgentStat] 判定基準日:', today.toISOString(), '全タスク数:', tasks.length);
+    console.log('[updateUrgentStat] 判定基準日:', formatDateJST(today), '全タスク数:', tasks.length);
 
     tasks.forEach(function(t) {
       // 完了判定
@@ -4408,7 +4434,7 @@
     rebuildTaskClientSelect();
     var dateEl = document.getElementById('inquiry-date');
     if (dateEl && !dateEl.value) {
-      dateEl.value = new Date().toISOString().slice(0, 10);
+      dateEl.value = todayJST();
     }
     renderInquiryList();
   }
@@ -4487,7 +4513,7 @@
     var assignSel = document.getElementById('inquiry-assignee'); if (assignSel) assignSel.value = '';
     var statusSel = document.getElementById('inquiry-status'); if (statusSel) statusSel.value = 'inprogress';
     var dateEl    = document.getElementById('inquiry-date');
-    if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+    if (dateEl) dateEl.value = todayJST();
     var msg = document.getElementById('inquiry-save-msg');
     if (msg) msg.style.display = 'none';
   }
@@ -4626,7 +4652,7 @@
     // 相談日を今日に初期化（空の場合）
     var dt = document.getElementById('consult-datetime');
     if (dt && !dt.value) {
-      dt.value = new Date().toISOString().slice(0, 10);
+      dt.value = todayJST();
     }
     renderConsultList();
   }
@@ -4734,7 +4760,7 @@
     });
     var sel = document.getElementById('consult-client');    if (sel) sel.value = '';
     var dt  = document.getElementById('consult-datetime');
-    if (dt) { dt.value = new Date().toISOString().slice(0, 10); }
+    if (dt) { dt.value = todayJST(); }
     document.getElementById('consult-assignee').value = '';
     document.getElementById('consult-tool').value     = '';
     document.getElementById('consult-category').value = '';
@@ -4807,7 +4833,7 @@
     };
 
     // ── スプレッドシート「相談記録」シートへ保存（新規・編集とも） ──
-    var nowJST = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    var nowJST = formatDateTimeJST(new Date());
     var assigneeName = ASSIGNEE_LABEL[entry.assignee] || entry.assignee || '';
     var statusJp = CONSULT_STATUS[entry.status] ? CONSULT_STATUS[entry.status].label : entry.status;
     var todoFlagStr = entry.todoFlag ? 'TRUE' : 'FALSE';
@@ -5388,7 +5414,7 @@
       completeTodo(target.id, workTimeArg).then(function(success) {
         if (success) {
           target.status = 'done';
-          target.recorded = new Date().toISOString();
+          target.recorded = formatDateTimeJST(new Date());
           saveTasks(loadTasks());
           addActivity('todo_updated', actText(editData.client || target.client, editData.text || target.text, ' を更新（完了）'));
           return refreshFromSheet().then(function() { renderCalendar(); });
@@ -5779,7 +5805,7 @@
     // 集計月を今月に初期化（空の場合のみ）
     var monthEl = document.getElementById('ts-month');
     if (monthEl && !monthEl.value) {
-      monthEl.value = new Date().toISOString().slice(0, 7);
+      monthEl.value = thisMonthJST();
     }
     // 顧問先プルダウンを最新クライアントで再構築
     var clients = loadClients().filter(function(c) { return c.status === 'active'; });
@@ -6201,7 +6227,7 @@
   // 記録追加フォームの記録日を今日に初期化
   (function() {
     var d = document.getElementById('rec-date');
-    if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
+    if (d && !d.value) d.value = todayJST();
   })();
   // スプレッドシートからデータを取得して初期表示
   // ※ タスクの描画とカード統計はfetchTasksFromSheet内で即座に実行される
