@@ -1886,7 +1886,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v49 (算定年更日付セル空欄表示)');
+  console.log('[app] コードバージョン: 2026-03-11-v50 (算定年更日付セル空欄表示修正)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -5557,7 +5557,7 @@
   }
 
   function bsDateEdit(td) {
-    if (td.querySelector('input')) return; // 既に編集中
+    if (td.querySelector('input')) return;
     var idx = td.getAttribute('data-idx');
     var col = td.getAttribute('data-col');
     var raw = (busySeasonRows[idx] && busySeasonRows[idx][col]) || '';
@@ -5565,8 +5565,11 @@
     td.innerHTML = '<input type="date" value="' + esc(inputVal) + '" />';
     var inp = td.querySelector('input');
     inp.focus();
+    var done = false;
     function commit() {
-      var v = inp.value; // YYYY-MM-DD or ''
+      if (done) return;
+      done = true;
+      var v = inp.value;
       if (busySeasonRows[idx]) busySeasonRows[idx][col] = v;
       var display = normalizeDateString(v);
       td.className = 'bs-step-cell' + (display ? '' : ' empty');
