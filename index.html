@@ -357,7 +357,9 @@
     .bs-group-santei { background: #e3f2fd !important; color: #1565c0; }
     .bs-th-fixed { background: #e8f0e8 !important; }
     .bs-th-step { min-width: 110px; width: 110px; }
-    .bs-step-cell { min-width: 110px; width: 110px; white-space: nowrap; }
+    .bs-step-cell { min-width: 110px; width: 110px; white-space: nowrap; cursor: pointer; }
+    .bs-step-cell.empty { color: transparent; }
+    .bs-step-cell .bs-date-display { display: block; width: 100%; padding: 2px; font-size: 0.82rem; }
     .bs-step-cell input[type="date"] { min-width: 100px; }
     .bs-table tbody td { background: #fff; }
     .bs-table tbody tr:hover td { background: #f8fbf8; }
@@ -1884,7 +1886,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v48 (算定年更日付文字列ベース統一)');
+  console.log('[app] コードバージョン: 2026-03-11-v49 (算定年更日付セル空欄表示)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -5527,8 +5529,9 @@
       // 工程セル
       var stepCells = BS_STEP_COLS.map(function(col) {
         var v = row[col] || '';
-        var displayVal = normalizeDateString(v) || v;
-        return '<td class="bs-step-cell"><input type="date" data-idx="' + idx + '" data-col="' + col + '" value="' + esc(toDateInputValue(v)) + '" onchange="updateBsCell(this)" /></td>';
+        var display = normalizeDateString(v);
+        var cls = 'bs-step-cell' + (display ? '' : ' empty');
+        return '<td class="' + cls + '" data-idx="' + idx + '" data-col="' + col + '" onclick="bsDateEdit(this)"><span class="bs-date-display">' + esc(display) + '</span></td>';
       }).join('');
 
       return '<tr>' +
@@ -5551,6 +5554,26 @@
     if (busySeasonRows[idx]) {
       busySeasonRows[idx][col] = el.value;
     }
+  }
+
+  function bsDateEdit(td) {
+    if (td.querySelector('input')) return; // 既に編集中
+    var idx = td.getAttribute('data-idx');
+    var col = td.getAttribute('data-col');
+    var raw = (busySeasonRows[idx] && busySeasonRows[idx][col]) || '';
+    var inputVal = toDateInputValue(raw);
+    td.innerHTML = '<input type="date" value="' + esc(inputVal) + '" />';
+    var inp = td.querySelector('input');
+    inp.focus();
+    function commit() {
+      var v = inp.value; // YYYY-MM-DD or ''
+      if (busySeasonRows[idx]) busySeasonRows[idx][col] = v;
+      var display = normalizeDateString(v);
+      td.className = 'bs-step-cell' + (display ? '' : ' empty');
+      td.innerHTML = '<span class="bs-date-display">' + esc(display) + '</span>';
+    }
+    inp.addEventListener('change', commit);
+    inp.addEventListener('blur', commit);
   }
 
   function loadActiveClientsIntoBusySeason() {
