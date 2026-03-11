@@ -249,12 +249,9 @@
     /* ダッシュボード右カラム下段サブグリッド */
     .dash-sub-grid {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr 1fr auto;
       gap: 10px;
       align-items: start;
-    }
-    .dash-sub-grid #quick-msg-card {
-      max-width: 240px;
     }
     .dash-sub-grid .busy-season-card {
       max-width: 160px;
@@ -757,7 +754,7 @@
             <li style="padding:12px 0;color:#9e9e9e;font-size:0.86rem;text-align:center;">まだ操作履歴がありません</li>
           </ul>
         </div>
-        <!-- 下段: 一言メッセージ + 算定年更管理 -->
+        <!-- 下段: 一言メッセージ + 今日の予定 + 算定年更管理 -->
         <div class="dash-sub-grid">
           <!-- 一言メッセージ -->
           <div class="card" id="quick-msg-card" style="padding:10px 12px;">
@@ -774,6 +771,13 @@
             <div id="msg-list">
               <div style="color:#bbb;text-align:center;padding:4px 0;font-size:0.72rem;">メッセージなし</div>
             </div>
+          </div>
+          <!-- 今日の予定 -->
+          <div class="card" style="padding:10px 12px;">
+            <div class="section-title" style="margin-bottom:6px;font-size:0.78rem;">📋 今日の予定</div>
+            <ul id="today-schedule-list" style="list-style:none;padding:0;margin:0;font-size:0.78rem;">
+              <li style="color:#bbb;text-align:center;padding:4px 0;font-size:0.72rem;">読み込み中…</li>
+            </ul>
           </div>
           <!-- 算定年更管理 -->
           <div onclick="showPageByName('busy-season')" class="busy-season-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0;">
@@ -1779,7 +1783,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-03-11-v42 (下段カード幅制限)');
+  console.log('[app] コードバージョン: 2026-03-11-v43 (今日の予定カード追加)');
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
@@ -2246,6 +2250,7 @@
       renderInquiryList();
       updateInquiryStat();
       renderActivityList();
+      renderTodaySchedule();
     });
   }
 
@@ -2489,6 +2494,28 @@
     .catch(function(e) {
       console.error('[deleteQuickMsg] 失敗:', e);
     });
+  }
+
+  // --- 今日の予定 ---
+  function renderTodaySchedule() {
+    var el = document.getElementById('today-schedule-list');
+    if (!el) return;
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    var tasks = loadTasks().filter(function(t) {
+      return t.due && t.due.slice(0, 10) === todayStr && !isArchivedTask(t);
+    });
+    if (!tasks.length) {
+      el.innerHTML = '<li style="color:#bbb;text-align:center;padding:4px 0;font-size:0.72rem;">今日の期限タスクはありません</li>';
+      return;
+    }
+    var show = tasks.slice(0, 5);
+    var html = '';
+    show.forEach(function(t) {
+      var label = (t.category ? t.category + '　' : '') + (t.client || t.text || '');
+      html += '<li style="padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:0.76rem;">・' + esc(label) + '</li>';
+    });
+    el.innerHTML = html;
   }
 
   function renderTasks() {
@@ -6044,6 +6071,7 @@
     try { updateInquiryStat(); } catch(e) { console.error('[初期化] updateInquiryStat エラー:', e); }
     try { renderTimeSummary(); } catch(e) { console.error('[初期化] renderTimeSummary エラー:', e); }
     try { renderActivityList(); } catch(e) { console.error('[初期化] renderActivityList エラー:', e); }
+    try { renderTodaySchedule(); } catch(e) { console.error('[初期化] renderTodaySchedule エラー:', e); }
     // 一言メッセージ: 宛先を自分以外にデフォルト設定
     try {
       var myId = localStorage.getItem('myMemberId') || 'hamada';
