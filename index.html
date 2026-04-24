@@ -759,6 +759,10 @@
       <span class="nav-icon">📊</span>
       <span class="nav-label">算定年更管理</span>
     </div>
+    <div class="nav-item" onclick="showPage('stress-check', this)">
+      <span class="nav-icon">🧠</span>
+      <span class="nav-label">ストレスチェック</span>
+    </div>
   </nav>
 </aside>
 
@@ -1883,6 +1887,141 @@
     </div>
   </div>
 
+  <!-- ストレスチェック管理 -->
+  <div class="page" id="page-stress-check">
+    <div class="page-header">
+      <h1>ストレスチェック管理</h1>
+      <p>ストレスチェックの実施状況を管理します</p>
+    </div>
+
+    <!-- 操作バー -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <input type="text" id="sc-search" class="form-input" placeholder="事業所名で検索" style="width:180px;" oninput="renderStressCheckTable()" />
+        <select id="sc-filter-status" class="form-select" style="width:130px;" onchange="renderStressCheckTable()">
+          <option value="">すべてのステータス</option>
+          <option value="未着手">未着手</option>
+          <option value="説明中">説明中</option>
+          <option value="実施中">実施中</option>
+          <option value="集計中">集計中</option>
+          <option value="完了">完了</option>
+          <option value="中止">中止</option>
+        </select>
+        <button class="btn btn-primary" style="font-size:0.88rem;" onclick="openStressCheckForm(null)">＋ 新規登録</button>
+        <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="fetchStressCheckRecords()">更新</button>
+        <span id="sc-save-msg" style="display:none;font-size:0.82rem;color:#2e7d32;font-weight:600;">保存しました</span>
+        <span id="sc-error-msg" style="display:none;font-size:0.82rem;color:#c62828;font-weight:600;"></span>
+      </div>
+    </div>
+
+    <!-- 一覧テーブル -->
+    <div class="card" style="padding:0;overflow:auto;">
+      <table id="sc-table">
+        <thead>
+          <tr>
+            <th>事業所名</th>
+            <th>実施月</th>
+            <th>担当者</th>
+            <th>ステータス</th>
+            <th>開始日</th>
+            <th>終了日</th>
+            <th>郵送日</th>
+            <th style="width:80px;"></th>
+          </tr>
+        </thead>
+        <tbody id="sc-tbody"></tbody>
+      </table>
+      <div id="sc-empty" style="display:none;text-align:center;color:#9e9e9e;padding:32px;font-size:0.88rem;">データがありません。「＋ 新規登録」で追加してください。</div>
+      <div id="sc-loading" style="text-align:center;color:#9e9e9e;padding:32px;font-size:0.88rem;">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- ストレスチェック 新規登録 / 編集モーダル -->
+  <div class="modal-overlay" id="sc-modal" style="display:none;" onclick="if(event.target===this)closeStressCheckModal()">
+    <div class="modal-dialog" style="width:min(680px,95vw);">
+      <div class="modal-header">
+        <span class="modal-title" id="sc-modal-title">ストレスチェック新規登録</span>
+        <button class="modal-close" onclick="closeStressCheckModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="sc-form-id" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">事業所名 <span style="color:#c62828;">*</span></label>
+            <input type="text" id="sc-f-jigyosho" class="form-input" placeholder="例：株式会社〇〇" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">担当者</label>
+            <input type="text" id="sc-f-tanto" class="form-input" placeholder="例：濱田" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">実施月</label>
+            <input type="month" id="sc-f-jisshiMonth" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">ステータス</label>
+            <select id="sc-f-status" class="form-select">
+              <option value="未着手">未着手</option>
+              <option value="説明中">説明中</option>
+              <option value="実施中">実施中</option>
+              <option value="集計中">集計中</option>
+              <option value="完了">完了</option>
+              <option value="中止">中止</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">説明日</label>
+            <input type="date" id="sc-f-setsumei" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">同意取得日</label>
+            <input type="date" id="sc-f-doi" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">開始日</label>
+            <input type="date" id="sc-f-kaishi" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">終了日</label>
+            <input type="date" id="sc-f-shuryo" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">集団分析同意</label>
+            <select id="sc-f-groupAgree" class="form-select" onchange="onGroupAgreeChange()">
+              <option value="">―</option>
+              <option value="○">○（あり）</option>
+              <option value="×">×（なし）</option>
+            </select>
+          </div>
+          <div class="form-group" id="sc-f-groupEnclose-wrap">
+            <label class="form-label">集団分析同封</label>
+            <select id="sc-f-groupEnclose" class="form-select">
+              <option value="">―</option>
+              <option value="○">○（あり）</option>
+              <option value="×">×（なし）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">出力日</label>
+            <input type="date" id="sc-f-shutsuryoku" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">郵送日</label>
+            <input type="date" id="sc-f-yuso" class="form-input" />
+          </div>
+          <div class="form-group full">
+            <label class="form-label">備考</label>
+            <textarea id="sc-f-biko" class="form-textarea" rows="3" placeholder="メモや特記事項を入力"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeStressCheckModal()">キャンセル</button>
+        <button class="btn btn-primary" id="sc-submit-btn" onclick="submitStressCheckForm()">登録</button>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -1925,8 +2064,10 @@
 
   // ===== ページ・タブ切り替え =====
   function showPage(name, el) {
+    var pageEl = document.getElementById('page-' + name);
+    if (!pageEl) { console.error('[showPage] ページ要素が見つかりません: page-' + name); return; }
     document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
-    document.getElementById('page-' + name).classList.add('active');
+    pageEl.classList.add('active');
     document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
     el.classList.add('active');
     window.scrollTo(0, 0);
@@ -1944,6 +2085,7 @@
     if (name === 'inquiry')        initInquiryPage();
     if (name === 'calendar')       initCalendarPage();
     if (name === 'busy-season')    initBusySeasonPage();
+    if (name === 'stress-check')   { try { initStressCheckPage(); } catch(e) { console.error('[stress-check] 初期化エラー:', e); } }
     if (name === 'dashboard')      { refreshFromSheet(); renderActivityList(); }
   }
 
@@ -6239,6 +6381,217 @@
     URL.revokeObjectURL(url);
   }
 
+  // ===== ストレスチェック管理 =====
+
+  var SC_STATUS_COLORS = {
+    '未着手': 'status-new',
+    '説明中': 'status-prospect',
+    '実施中': 'status-inprogress',
+    '集計中': 'status-waiting',
+    '完了':   'status-active',
+    '中止':   'status-terminated'
+  };
+
+  var stressCheckCache = [];
+
+  function fetchStressCheckRecords() {
+    var loading = document.getElementById('sc-loading');
+    var empty   = document.getElementById('sc-empty');
+    if (loading) loading.style.display = '';
+    if (empty)   empty.style.display   = 'none';
+    return fetch(GAS_URL + '?action=getStressCheckRecords')
+      .then(function(res) { return res.json(); })
+      .then(function(rows) {
+        stressCheckCache = Array.isArray(rows) ? rows : [];
+        renderStressCheckTable();
+      })
+      .catch(function(e) {
+        console.error('[fetchStressCheck] エラー:', e);
+        if (loading) loading.style.display = 'none';
+      });
+  }
+
+  function renderStressCheckTable() {
+    var loading = document.getElementById('sc-loading');
+    var empty   = document.getElementById('sc-empty');
+    var tbody   = document.getElementById('sc-tbody');
+    if (!tbody) return;
+
+    var search       = (document.getElementById('sc-search')        ? document.getElementById('sc-search').value        : '').toLowerCase();
+    var filterStatus = (document.getElementById('sc-filter-status') ? document.getElementById('sc-filter-status').value : '');
+
+    var rows = stressCheckCache.filter(function(r) {
+      if (search && String(r['事業所名'] || '').toLowerCase().indexOf(search) === -1) return false;
+      if (filterStatus && r['ステータス'] !== filterStatus) return false;
+      return true;
+    });
+
+    if (loading) loading.style.display = 'none';
+
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    var html = '';
+    rows.forEach(function(r) {
+      var statusClass = SC_STATUS_COLORS[r['ステータス']] || '';
+      var id = esc(String(r['ID'] || ''));
+      html += '<tr>';
+      html += '<td>' + esc(r['事業所名'] || '') + '</td>';
+      html += '<td>' + esc(r['実施月'] || '') + '</td>';
+      html += '<td>' + esc(r['担当者'] || '') + '</td>';
+      html += '<td><span class="status-badge ' + statusClass + '">' + esc(r['ステータス'] || '') + '</span></td>';
+      html += '<td>' + esc(scDateShort(r['開始日'])) + '</td>';
+      html += '<td>' + esc(scDateShort(r['終了日'])) + '</td>';
+      html += '<td>' + esc(scDateShort(r['郵送日'])) + '</td>';
+      html += '<td><button class="btn btn-secondary" style="font-size:0.78rem;padding:4px 10px;" onclick="openStressCheckForm(' + id + ')">編集</button></td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  // yyyy-MM-dd → MM/DD の省略表示
+  function scDateShort(val) {
+    if (!val) return '';
+    var m = String(val).match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
+    if (m) return m[2] + '/' + m[3];
+    return String(val);
+  }
+
+  // <input type="date"> 用に yyyy-MM-dd へ正規化
+  function scToDateInput(val) {
+    if (!val) return '';
+    var m = String(val).match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return '';
+    return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
+  }
+
+  function openStressCheckForm(id) {
+    var isNew = (id === null || id === undefined);
+    document.getElementById('sc-modal-title').textContent = isNew ? 'ストレスチェック新規登録' : 'ストレスチェック編集';
+    document.getElementById('sc-submit-btn').textContent  = isNew ? '登録' : '更新';
+    document.getElementById('sc-form-id').value           = isNew ? '' : String(id);
+
+    // フォームリセット
+    ['sc-f-jigyosho','sc-f-tanto','sc-f-jisshiMonth','sc-f-setsumei','sc-f-doi',
+     'sc-f-kaishi','sc-f-shuryo','sc-f-shutsuryoku','sc-f-yuso','sc-f-biko'].forEach(function(fid) {
+      var el = document.getElementById(fid);
+      if (el) el.value = '';
+    });
+    document.getElementById('sc-f-status').value     = '未着手';
+    document.getElementById('sc-f-groupAgree').value = '';
+    document.getElementById('sc-f-groupEnclose').value = '';
+
+    if (!isNew) {
+      var r = stressCheckCache.find(function(row) { return String(row['ID']) === String(id); });
+      if (r) {
+        document.getElementById('sc-f-jigyosho').value    = r['事業所名']   || '';
+        document.getElementById('sc-f-tanto').value       = r['担当者']     || '';
+        document.getElementById('sc-f-jisshiMonth').value = r['実施月']     || '';
+        document.getElementById('sc-f-status').value      = r['ステータス'] || '未着手';
+        document.getElementById('sc-f-setsumei').value    = scToDateInput(r['説明日']);
+        document.getElementById('sc-f-doi').value         = scToDateInput(r['同意取得日']);
+        document.getElementById('sc-f-kaishi').value      = scToDateInput(r['開始日']);
+        document.getElementById('sc-f-shuryo').value      = scToDateInput(r['終了日']);
+        document.getElementById('sc-f-groupAgree').value  = r['集団分析同意'] || '';
+        document.getElementById('sc-f-groupEnclose').value= r['集団分析同封'] || '';
+        document.getElementById('sc-f-shutsuryoku').value = scToDateInput(r['出力日']);
+        document.getElementById('sc-f-yuso').value        = scToDateInput(r['郵送日']);
+        document.getElementById('sc-f-biko').value        = r['備考'] || '';
+      }
+    }
+
+    onGroupAgreeChange();
+    document.getElementById('sc-modal').style.display = 'flex';
+  }
+
+  function closeStressCheckModal() {
+    document.getElementById('sc-modal').style.display = 'none';
+  }
+
+  // 集団分析同意が ○ 以外のとき集団分析同封を非表示・クリア
+  function onGroupAgreeChange() {
+    var val  = document.getElementById('sc-f-groupAgree').value;
+    var wrap = document.getElementById('sc-f-groupEnclose-wrap');
+    if (val !== '○') {
+      wrap.style.display = 'none';
+      document.getElementById('sc-f-groupEnclose').value = '';
+    } else {
+      wrap.style.display = '';
+    }
+  }
+
+  function submitStressCheckForm() {
+    var jigyosho = (document.getElementById('sc-f-jigyosho').value || '').trim();
+    if (!jigyosho) { alert('事業所名を入力してください'); return; }
+
+    var id    = document.getElementById('sc-form-id').value;
+    var isNew = !id;
+
+    var payload = {
+      action:       isNew ? 'saveStressCheckRecord' : 'updateStressCheckRecord',
+      '事業所名':   jigyosho,
+      '担当者':     document.getElementById('sc-f-tanto').value        || '',
+      '実施月':     document.getElementById('sc-f-jisshiMonth').value  || '',
+      '説明日':     document.getElementById('sc-f-setsumei').value     || '',
+      '同意取得日': document.getElementById('sc-f-doi').value          || '',
+      '開始日':     document.getElementById('sc-f-kaishi').value       || '',
+      '終了日':     document.getElementById('sc-f-shuryo').value       || '',
+      '集団分析同意': document.getElementById('sc-f-groupAgree').value    || '',
+      '集団分析同封': document.getElementById('sc-f-groupEnclose').value  || '',
+      '出力日':     document.getElementById('sc-f-shutsuryoku').value  || '',
+      '郵送日':     document.getElementById('sc-f-yuso').value         || '',
+      'ステータス': document.getElementById('sc-f-status').value       || '未着手',
+      '備考':       document.getElementById('sc-f-biko').value         || ''
+    };
+    if (!isNew) payload['ID'] = parseInt(id, 10);
+
+    var btn = document.getElementById('sc-submit-btn');
+    btn.disabled    = true;
+    btn.textContent = '保存中…';
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      btn.disabled    = false;
+      btn.textContent = isNew ? '登録' : '更新';
+      if (result.success) {
+        closeStressCheckModal();
+        fetchStressCheckRecords();
+        var msg = document.getElementById('sc-save-msg');
+        if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 2500); }
+      } else {
+        var errEl = document.getElementById('sc-error-msg');
+        if (errEl) {
+          errEl.textContent = 'エラー: ' + (result.error || '不明なエラー');
+          errEl.style.display = '';
+          setTimeout(function() { errEl.style.display = 'none'; }, 4000);
+        }
+      }
+    })
+    .catch(function(e) {
+      btn.disabled    = false;
+      btn.textContent = isNew ? '登録' : '更新';
+      console.error('[submitStressCheck] 通信エラー:', e);
+    });
+  }
+
+  function initStressCheckPage() {
+    // 初回のみ fetch、以降はキャッシュ再描画
+    if (!stressCheckCache.length) {
+      fetchStressCheckRecords();
+    } else {
+      renderStressCheckTable();
+    }
+  }
+
   // ===== 初期化 =====
 
   // 日付挨拶の表示
@@ -6259,7 +6612,7 @@
       '忙しい中いつもありがとうございます'
     ];
     var msg = messages[Math.floor(Math.random() * messages.length)];
-    var emojis = ['🌸','🌼','🌷','🪻','🍀','☀️','🌿','🌱','🐝','🦋'];
+    var emojis = ['🌸','🍑','🐖','🌵','🍀','🦄','🌿','🌱','🐝','🥀'];
     var emoji = emojis[Math.floor(Math.random() * emojis.length)];
     el.textContent = dateStr + '　' + msg + ' ' + emoji;
   })();

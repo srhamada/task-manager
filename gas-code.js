@@ -11,6 +11,7 @@ var SHEET_CLIENT  = 'クライアント';
 var SHEET_INQUIRY = '行政問い合わせ記録';
 var SHEET_CONSULT = '相談記録';
 var SHEET_BUSY    = '算定年更管理';
+var SHEET_STRESS  = 'ストレスチェック管理';
 var SHEET_ACTIVITY = 'アクティビティログ';
 var SHEET_HOLIDAY  = '休日マスタ';
 var SHEET_MESSAGE  = '一言メッセージ';
@@ -32,6 +33,11 @@ function doGet(e) {
   // ── 算定年更管理データ取得 ──
   if (action === 'getBusySeasonRecords') {
     return handleGetBusySeasonRecords_(e);
+  }
+
+  // ── ストレスチェック管理データ取得 ──
+  if (action === 'getStressCheckRecords') {
+    return handleGetStressCheckRecords_();
   }
 
   // ── アクティビティログ取得（直近20件） ──
@@ -166,6 +172,16 @@ function doPost(e) {
     // ── 算定年更管理 一括保存 ──
     if (data.action === 'saveBusySeasonRecords') {
       return handleSaveBusySeasonRecords_(ss, data);
+    }
+
+    // ── ストレスチェック管理 新規追加 ──
+    if (data.action === 'saveStressCheckRecord') {
+      return handleSaveStressCheckRecord_(ss, data);
+    }
+
+    // ── ストレスチェック管理 更新 ──
+    if (data.action === 'updateStressCheckRecord') {
+      return handleUpdateStressCheckRecord_(ss, data);
     }
 
     // ── 行更新アクション ──
@@ -697,6 +713,96 @@ function handleSaveBusySeasonRecords_(ss, data) {
 
   Logger.log('[saveBusySeason] 保存完了: 全' + (allRows.length - 1) + '行（今回' + newRows.length + '行）');
   return jsonResponse_({ success: true, savedCount: newRows.length, totalCount: allRows.length - 1 });
+}
+
+// --------------- ストレスチェック管理 ---------------
+
+// データ取得（全件）
+function handleGetStressCheckRecords_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_STRESS);
+  if (!sheet) {
+    Logger.log('[getStressCheck] シート未作成');
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var headers = data[0];
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = data[i][j];
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy-MM-dd');
+      }
+      obj[headers[j]] = val;
+    }
+    result.push(obj);
+  }
+  Logger.log('[getStressCheck] 件数: ' + result.length);
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 新規追加（ID・作成日・更新日を自動セット）
+function handleSaveStressCheckRecord_(ss, data) {
+  var sheet = ss.getSheetByName(SHEET_STRESS);
+  if (!sheet) {
+    return jsonResponse_({ success: false, error: 'シート「' + SHEET_STRESS + '」が見つかりません' });
+  }
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+
+  data['ID'] = getNextId_(sheet, headers);
+  data['作成日'] = nowJST;
+  data['更新日'] = nowJST;
+
+  var row = headers.map(function(h) {
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  Logger.log('[saveStressCheck] 新規追加: ID=' + data['ID'] + ', 事業所=' + data['事業所名']);
+  return jsonResponse_({ success: true, id: data['ID'] });
+}
+
+// 更新（ID指定で1行更新、更新日はGAS側で自動セット）
+function handleUpdateStressCheckRecord_(ss, data) {
+  var sheet = ss.getSheetByName(SHEET_STRESS);
+  if (!sheet) {
+    return jsonResponse_({ success: false, error: 'シート「' + SHEET_STRESS + '」が見つかりません' });
+  }
+  var allData = sheet.getDataRange().getValues();
+  var headers = allData[0];
+  var idCol = headers.indexOf('ID');
+  if (idCol === -1) {
+    return jsonResponse_({ success: false, error: 'ID列が見つかりません' });
+  }
+  var targetId = String(data['ID'] || '');
+  for (var i = 1; i < allData.length; i++) {
+    if (String(allData[i][idCol]) === targetId) {
+      var rowNum = i + 1;
+      var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+      for (var j = 0; j < headers.length; j++) {
+        var colName = headers[j];
+        if (colName === 'ID' || colName === '作成日') continue;
+        if (colName === '更新日') {
+          sheet.getRange(rowNum, j + 1).setValue(nowJST);
+          continue;
+        }
+        if (data[colName] !== undefined) {
+          sheet.getRange(rowNum, j + 1).setValue(data[colName]);
+        }
+      }
+      Logger.log('[updateStressCheck] 行' + rowNum + ' 更新完了: ID=' + targetId);
+      return jsonResponse_({ success: true, updatedRow: rowNum });
+    }
+  }
+  return jsonResponse_({ success: false, error: '該当ID(' + targetId + ')が見つかりません' });
 }
 
 // --------------- 担当者状態（一時保存） ---------------
