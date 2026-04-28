@@ -184,6 +184,11 @@ function doPost(e) {
       return handleUpdateStressCheckRecord_(ss, data);
     }
 
+    // ── ストレスチェック 重要フラグ専用更新 ──
+    if (data.action === 'updateStressCheckFlag') {
+      return handleUpdateStressCheckFlag_(ss, data);
+    }
+
     // ── 行更新アクション ──
     if (data.action === 'updateRow') {
       return handleUpdateRow_(ss, data);
@@ -771,6 +776,59 @@ function handleSaveStressCheckRecord_(ss, data) {
 }
 
 // 更新（ID指定で1行更新、更新日はGAS側で自動セット）
+// 重要フラグ専用更新（ID行を特定して「重要フラグ」列だけを書き込む）
+function handleUpdateStressCheckFlag_(ss, data) {
+  var action    = data.action || '';
+  var id        = String(data['ID'] || '');
+  var flagValue = String(data['重要フラグ'] || '');
+
+  Logger.log('[updateStressCheckFlag] action=' + action + ', ID=' + id + ', 重要フラグ=' + flagValue);
+
+  if (!id) {
+    Logger.log('[updateStressCheckFlag] ❌ IDが指定されていません');
+    return jsonResponse_({ success: false, message: 'IDが指定されていません' });
+  }
+  if (flagValue !== 'TRUE' && flagValue !== 'FALSE') {
+    Logger.log('[updateStressCheckFlag] ❌ 重要フラグの値が不正: ' + flagValue);
+    return jsonResponse_({ success: false, message: '重要フラグの値は TRUE または FALSE である必要があります（受信値: "' + flagValue + '"）' });
+  }
+
+  var sheet = ss.getSheetByName(SHEET_STRESS);
+  if (!sheet) {
+    Logger.log('[updateStressCheckFlag] ❌ シートが見つかりません: ' + SHEET_STRESS);
+    return jsonResponse_({ success: false, message: 'シート「' + SHEET_STRESS + '」が見つかりません' });
+  }
+
+  var allData = sheet.getDataRange().getValues();
+  var headers  = allData[0];
+
+  var idCol   = headers.indexOf('ID');
+  var flagCol = headers.indexOf('重要フラグ');
+
+  Logger.log('[updateStressCheckFlag] ID列index=' + idCol + ', 重要フラグ列index=' + flagCol);
+  Logger.log('[updateStressCheckFlag] ヘッダー一覧: ' + JSON.stringify(headers));
+
+  if (idCol === -1) {
+    return jsonResponse_({ success: false, message: 'シートに「ID」列が見つかりません' });
+  }
+  if (flagCol === -1) {
+    return jsonResponse_({ success: false, message: 'シート「' + SHEET_STRESS + '」に「重要フラグ」列が見つかりません。ヘッダー行に「重要フラグ」という列を追加してください。現在のヘッダー: ' + headers.join(', ') });
+  }
+
+  for (var i = 1; i < allData.length; i++) {
+    if (String(allData[i][idCol]) === id) {
+      var rowNum = i + 1;
+      Logger.log('[updateStressCheckFlag] 書き込み対象行=' + rowNum + ', 列=' + (flagCol + 1) + ', 値=' + flagValue);
+      sheet.getRange(rowNum, flagCol + 1).setValue(flagValue);
+      Logger.log('[updateStressCheckFlag] ✅ 書き込み完了: 行' + rowNum + ' の重要フラグ → ' + flagValue);
+      return jsonResponse_({ success: true, updatedRow: rowNum, flagValue: flagValue });
+    }
+  }
+
+  Logger.log('[updateStressCheckFlag] ❌ 対象IDが見つかりません: ' + id);
+  return jsonResponse_({ success: false, message: '対象ID(' + id + ')が「' + SHEET_STRESS + '」シートに見つかりません' });
+}
+
 function handleUpdateStressCheckRecord_(ss, data) {
   var sheet = ss.getSheetByName(SHEET_STRESS);
   if (!sheet) {
