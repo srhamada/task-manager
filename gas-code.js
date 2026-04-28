@@ -782,6 +782,12 @@ function handleUpdateStressCheckRecord_(ss, data) {
   if (idCol === -1) {
     return jsonResponse_({ success: false, error: 'ID列が見つかりません' });
   }
+  // 「重要フラグ」を含む更新の場合、列が存在するか先に確認
+  if (data['重要フラグ'] !== undefined && headers.indexOf('重要フラグ') === -1) {
+    Logger.log('[updateStressCheck] ❌ 「重要フラグ」列が見つかりません。ヘッダー: ' + JSON.stringify(headers));
+    return jsonResponse_({ success: false, error: 'スプレッドシートの「ストレスチェック管理」シートに「重要フラグ」列がありません。シートのヘッダー行に「重要フラグ」列を追加してください。' });
+  }
+
   var targetId = String(data['ID'] || '');
   for (var i = 1; i < allData.length; i++) {
     if (String(allData[i][idCol]) === targetId) {

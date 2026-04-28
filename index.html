@@ -6727,7 +6727,11 @@
   function toggleStressFlag(id) {
     var r = stressCheckCache.find(function(row) { return String(row['ID']) === String(id); });
     if (!r) return;
-    var newFlag = String(r['重要フラグ'] || '').toUpperCase() === 'TRUE' ? 'FALSE' : 'TRUE';
+
+    var prevFlag = r['重要フラグ'];
+    var newFlag  = String(prevFlag || '').toUpperCase() === 'TRUE' ? 'FALSE' : 'TRUE';
+
+    // 楽観的更新：先に画面に反映
     r['重要フラグ'] = newFlag;
     renderStressCheckTable();
 
@@ -6750,12 +6754,50 @@
       'ステータス': autoStatus,
       '備考':       r['備考'] || ''
     };
+
     fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
-    }).then(function(res) { return res.json(); })
-      .catch(function(e) { console.error('[toggleStressFlag] エラー:', e); });
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result.success) {
+        // 保存成功：一覧上部にメッセージ表示
+        var msg = document.getElementById('sc-save-msg');
+        if (msg) {
+          msg.textContent = newFlag === 'TRUE' ? '★ 重要フラグを設定しました' : '★ 重要フラグを解除しました';
+          msg.style.display = '';
+          setTimeout(function() {
+            msg.textContent = '保存しました';
+            msg.style.display = 'none';
+          }, 2000);
+        }
+      } else {
+        // 保存失敗：キャッシュをロールバックして再描画
+        r['重要フラグ'] = prevFlag;
+        renderStressCheckTable();
+        var errMsg = result.error || '不明なエラー';
+        console.error('[toggleStressFlag] 保存失敗:', errMsg);
+        scShowError(errMsg);
+      }
+    })
+    .catch(function(e) {
+      // 通信エラー：キャッシュをロールバック
+      r['重要フラグ'] = prevFlag;
+      renderStressCheckTable();
+      console.error('[toggleStressFlag] 通信エラー:', e);
+      scShowError('通信エラーが発生しました。ネットワークを確認してください。');
+    });
+  }
+
+  // エラーメッセージ表示ヘルパー
+  function scShowError(msg) {
+    var errEl = document.getElementById('sc-error-msg');
+    if (!errEl) return;
+    errEl.textContent = 'エラー: ' + msg;
+    errEl.style.display = '';
+    setTimeout(function() { errEl.style.display = 'none'; }, 6000);
   }
 
   function initStressCheckPage() {
