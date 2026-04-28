@@ -28,9 +28,29 @@ function doGet(e) {
   var sheetName = (e && e.parameter && e.parameter.sheet)  ? e.parameter.sheet  : '';
   Logger.log('[doGet] action=' + action + ' sheet=' + sheetName);
 
-  // ── sheet パラメータが指定されていれば直接シートを返す（最優先）──
+  // ── sheet パラメータで明示指定（最優先）──
+  if (sheetName === 'ストレスチェック管理') {
+    Logger.log('[doGet] ストレスチェック管理シート取得');
+    return getSheetData_(SHEET_STRESS);
+  }
+  if (sheetName === 'クライアント') {
+    Logger.log('[doGet] クライアントシート取得');
+    return getSheetData_(SHEET_CLIENT);
+  }
+  if (sheetName === '算定年更管理') {
+    Logger.log('[doGet] 算定年更管理シート取得');
+    return getSheetData_(SHEET_BUSY);
+  }
+  if (sheetName === '記録') {
+    Logger.log('[doGet] 記録シート取得');
+    return getSheetData_(SHEET_RECORD);
+  }
+  if (sheetName === '給与計算記録') {
+    Logger.log('[doGet] 給与計算記録シート取得');
+    return getSheetData_(SHEET_PAYROLL);
+  }
   if (sheetName) {
-    Logger.log('[doGet] 取得シート: ' + sheetName);
+    Logger.log('[doGet] 汎用シート取得: ' + sheetName);
     return getSheetData_(sheetName);
   }
 
