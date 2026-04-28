@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v62 (SC画面クライアント直接取得・normalizeYesフィルター)');
+  console.log('[app] コードバージョン: 2026-04-28-v63 (SCフィルターデバッグログ・normalizeYes拡張・契約中判定柔軟化)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6441,10 +6441,11 @@
     return mergeScData(clients, scData);
   }
 
-  // yes / YES / Yes / 全角ｙｅｓ を全て true に正規化
+  // yes/YES/全角ｙｅｓ/TRUE/true/1 を全て true に正規化
   function normalizeYes(value) {
-    return String(value || '').trim().toLowerCase()
-      .replace(/[ｙＹ]/g, 'y').replace(/[ｅＥ]/g, 'e').replace(/[ｓＳ]/g, 's') === 'yes';
+    var s = String(value === true ? 'true' : (value || '')).trim().toLowerCase()
+      .replace(/[ｙＹ]/g, 'y').replace(/[ｅＥ]/g, 'e').replace(/[ｓＳ]/g, 's');
+    return s === 'yes' || s === 'true' || s === '1';
   }
 
   // クライアントとSCデータを両方フェッチして確実にマージ
@@ -6473,16 +6474,34 @@
         console.log('[loadStressCheck] クライアントサンプルkeys:', JSON.stringify(Object.keys(rawClients[0] || {})));
         console.log('[loadStressCheck] クライアントサンプル:', JSON.stringify(rawClients[0]));
 
-        // ストレスチェック=yes のアクティブクライアントのみ抽出
+        // フィルターデバッグ：先頭5件の判定関連値を出力
+        console.log('[SC filter debug]', JSON.stringify(rawClients.slice(0, 5).map(function(c) {
+          return {
+            name:           c['会社名'] || c['事業所名'] || c['クライアント名'] || c['name'],
+            status:         c['ステータス'],
+            state:          c['状態'],
+            contractStatus: c['契約状況'],
+            stressCheck:    c['ストレスチェック'],
+            keys:           Object.keys(c)
+          };
+        })));
+
+        // ストレスチェック=yes のクライアントを抽出
+        // 契約中判定：ステータス/状態/契約状況 のいずれかの列が存在する場合のみ適用
         var scClients = rawClients.filter(function(row) {
-          var statusRaw = row['ステータス'] || row['status'] || '';
-          var status    = String(statusRaw).trim();
-          // 日本語ステータスと英語コード両対応
-          var isActive  = status === 'active' || status === '契約中';
-          var isSC      = normalizeYes(row['ストレスチェック'] || row['stressCheck']);
-          return isActive && isSC;
+          var isSC = normalizeYes(row['ストレスチェック'] || row['stressCheck']);
+          if (!isSC) return false;
+
+          // 契約状態の列がどれかあれば判定、なければ除外しない
+          var statusVal   = row['ステータス'];
+          var stateVal    = row['状態'];
+          var contractVal = row['契約状況'];
+          var hasStatusCol = statusVal !== undefined || stateVal !== undefined || contractVal !== undefined;
+          if (!hasStatusCol) return true;
+
+          var raw = String(statusVal || stateVal || contractVal || '').trim();
+          return raw === '契約中' || raw.toLowerCase() === 'active';
         }).map(function(row) {
-          // mergeScData が期待する { name: '事業所名' } 形式に変換
           return { name: String(row['会社名'] || row['name'] || '').trim() };
         });
 
