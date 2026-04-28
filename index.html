@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v54 (SCにCSV出力機能追加)');
+  console.log('[app] コードバージョン: 2026-04-28-v55 (SC保存ログ強化・エラーハンドリング改善)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6710,35 +6710,56 @@
     if (msg)    msg.style.display    = 'none';
     if (errMsg) errMsg.style.display = 'none';
 
-    // 保存前にステータスを全行再計算
+    // 保存前にステータスを全行再計算（事業所名が空の行はスキップ）
     var rowsToSave = scRows.map(function(r) {
       var copy = {};
       SC_HEADERS.forEach(function(h) { copy[h] = r[h] || ''; });
       copy['ステータス'] = calcStressCheckStatus(r);
       return copy;
+    }).filter(function(r) {
+      var name = String(r['事業所名'] || '').trim();
+      if (!name) console.warn('[saveStressCheck] 保存失敗行: 事業所名なし行をスキップ → ', JSON.stringify(r));
+      return name !== '';
     });
 
+    console.log('[saveStressCheck] 保存対象件数: ' + rowsToSave.length);
+
+    if (rowsToSave.length === 0) {
+      var emptyMsg = '保存対象データがありません（事業所名が空の行はスキップ）';
+      console.warn('[saveStressCheck] ' + emptyMsg);
+      if (errMsg) { errMsg.textContent = emptyMsg; errMsg.style.display = ''; }
+      if (btn)    { btn.disabled = false; btn.textContent = '保存'; }
+      return;
+    }
+
     var postData = { action: 'saveStressCheckRecords', rows: rowsToSave };
-    console.log('[stressCheck] 保存: 行数=' + rowsToSave.length);
+    console.log('[saveStressCheck] 送信payload:', JSON.stringify(postData));
+    console.log('[saveStressCheck] GAS_URL:', typeof GAS_URL !== 'undefined' ? GAS_URL : '★未定義');
 
     fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(postData)
     })
-    .then(function(res) { return res.json(); })
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
     .then(function(result) {
-      console.log('[stressCheck] 保存結果:', JSON.stringify(result));
+      console.log('[saveStressCheck] GASレスポンス:', JSON.stringify(result));
       if (!result || result.success !== true) {
-        if (errMsg) { errMsg.textContent = '保存失敗: ' + (result && result.error || '不明'); errMsg.style.display = ''; }
+        var detail = result ? (result.error || result.message || '不明') : 'レスポンスなし';
+        console.warn('[saveStressCheck] 保存失敗: ' + detail);
+        if (errMsg) { errMsg.textContent = '保存失敗: ' + detail; errMsg.style.display = ''; }
         return;
       }
+      console.log('[saveStressCheck] 保存成功: ' + (result.savedCount || rowsToSave.length) + '行');
       if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
-      fetchStressCheckRecords(); // 保存後に再取得（更新日を反映）
+      fetchStressCheckRecords();
     })
     .catch(function(e) {
-      console.error('[stressCheck] 保存エラー:', e);
-      if (errMsg) { errMsg.textContent = '通信エラー'; errMsg.style.display = ''; }
+      console.error('[saveStressCheck] 通信エラー:', e.message || String(e));
+      if (errMsg) { errMsg.textContent = '通信エラー: ' + (e.message || String(e)); errMsg.style.display = ''; }
     })
     .finally(function() {
       if (btn) { btn.disabled = false; btn.textContent = '保存'; }
