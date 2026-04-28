@@ -20,60 +20,44 @@ var SHEET_MESSAGE  = '一言メッセージ';
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
 
 // --------------- doGet: シートデータを返す ---------------
-// パラメータ ?sheet=記録 で取得先を切り替え可能（デフォルト: TODO）
-// パラメータ ?action=getConsultTodos で相談記録の要対応データのみ返す
+// ?sheet=シート名 で取得先を切り替え（最優先）
+// ?action=xxx    で専用ハンドラを呼び出し
+// パラメータなしのデフォルト: TODO
 function doGet(e) {
-  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+  var action    = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+  var sheetName = (e && e.parameter && e.parameter.sheet)  ? e.parameter.sheet  : '';
+  Logger.log('[doGet] action=' + action + ' sheet=' + sheetName);
 
-  // ── 相談記録TODO取得（O列=TRUE かつ H列≠完了） ──
-  if (action === 'getConsultTodos') {
-    return handleGetConsultTodos_();
+  // ── sheet パラメータが指定されていれば直接シートを返す（最優先）──
+  if (sheetName) {
+    Logger.log('[doGet] 取得シート: ' + sheetName);
+    return getSheetData_(sheetName);
   }
 
-  // ── 算定年更管理データ取得 ──
-  if (action === 'getBusySeasonRecords') {
-    return handleGetBusySeasonRecords_(e);
-  }
+  // ── action ハンドラ ──
+  if (action === 'getConsultTodos')       return handleGetConsultTodos_();
+  if (action === 'getBusySeasonRecords')  return handleGetBusySeasonRecords_(e);
+  if (action === 'getStressCheckRecords') return handleGetStressCheckRecords_();
+  if (action === 'getActivityLog')        return handleGetActivityLog_();
+  if (action === 'getHolidayMaster')      return handleGetHolidayMaster_();
+  if (action === 'getMemberStatuses')     return handleGetMemberStatuses_();
+  if (action === 'getMessages')           return handleGetMessages_();
 
-  // ── ストレスチェック管理データ取得 ──
-  if (action === 'getStressCheckRecords') {
-    return handleGetStressCheckRecords_();
-  }
+  // ── デフォルト: TODO シート ──
+  Logger.log('[doGet] 取得シート: ' + SHEET_TODO + ' (デフォルト)');
+  return getSheetData_(SHEET_TODO);
+}
 
-  // ── アクティビティログ取得（直近20件） ──
-  if (action === 'getActivityLog') {
-    return handleGetActivityLog_();
-  }
-
-  // ── 休日マスタ取得 ──
-  if (action === 'getHolidayMaster') {
-    return handleGetHolidayMaster_();
-  }
-
-  // ── 担当者状態取得 ──
-  if (action === 'getMemberStatuses') {
-    return handleGetMemberStatuses_();
-  }
-
-  // ── 一言メッセージ取得 ──
-  if (action === 'getMessages') {
-    return handleGetMessages_();
-  }
-
-  var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : SHEET_TODO;
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+// 指定シートの全行をオブジェクト配列で返す汎用ヘルパー
+function getSheetData_(sheetName) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
-
   if (!sheet) {
     return jsonResponse_({ error: 'シート「' + sheetName + '」が見つかりません' });
   }
-
-  Logger.log('[doGet] シート: ' + sheetName);
-
-  var data = sheet.getDataRange().getValues();
+  var data    = sheet.getDataRange().getValues();
   var headers = data[0];
-  var result = [];
-
+  var result  = [];
   for (var i = 1; i < data.length; i++) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
@@ -81,9 +65,7 @@ function doGet(e) {
     }
     result.push(obj);
   }
-
-  Logger.log('[doGet] 件数: ' + result.length);
-
+  Logger.log('[getSheetData_] シート=' + sheetName + ' 件数=' + result.length);
   return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
 }

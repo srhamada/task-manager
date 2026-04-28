@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v58 (render直前ログ追加・ステータス保存値優先表示・マージ詳細ログ)');
+  console.log('[app] コードバージョン: 2026-04-28-v61 (GAS_URL最新デプロイURLに更新)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -2239,7 +2239,7 @@
   }
 
   // ===== TODO / Google Sheets連携 =====
-  var GAS_URL = 'https://script.google.com/macros/s/AKfycbyPpjS-Ni3Mi-PQvEXjIsNCgwirSkOfUgalWySBOuj1UbdiAsYo4xsudLR-A_iC0Cw4/exec';
+  var GAS_URL = 'https://script.google.com/macros/s/AKfycbyrNp04DqrGf1rahuiNNSyRjorfcstjWcDQa2GXU4nMvfF1QJcW8ucYjWhfx4_WlLOT/exec';
   var tasksCache = [];  // スプレッドシートから取得したタスクのキャッシュ
   var currentFilter = '';  // '' = すべて, 'hamada' or 'takasaki'
 
@@ -6453,7 +6453,10 @@
       return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
     });
     var clientPromise = hasScClients ? Promise.resolve(clientsCache) : fetchClientsFromSheet();
-    var scPromise     = fetch(GAS_URL + '?action=getStressCheckRecords').then(function(res) { return res.json(); });
+    var scSheetUrl    = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('ストレスチェック管理');
+    console.log('[loadStressCheck] GAS_URL:', GAS_URL);
+    console.log('[loadStressCheck] fetch URL (実際):', scSheetUrl);
+    var scPromise     = fetch(scSheetUrl).then(function(res) { return res.json(); });
 
     return Promise.all([clientPromise, scPromise])
       .then(function(results) {
@@ -6466,9 +6469,20 @@
 
         console.log('[loadStressCheck] クライアント件数: ' + scClients.length);
         console.log('[loadStressCheck] 管理シート件数: ' + scData.length);
+        console.log('[loadStressCheck] 管理シートサンプル:', JSON.stringify(scData.slice(0, 3)));
+
+        // TODOシートを誤取得していないか検出
         if (scData.length > 0) {
-          console.log('[loadStressCheck] 管理シートサンプル(keys):', JSON.stringify(Object.keys(scData[0])));
-          console.log('[loadStressCheck] 管理シートサンプル(値):', JSON.stringify(scData[0]));
+          var TODO_MARKER_KEYS = ['クライアント', '業務種別', 'タスク内容'];
+          var firstKeys = Object.keys(scData[0]);
+          var isTODO = TODO_MARKER_KEYS.some(function(k) { return firstKeys.indexOf(k) !== -1; });
+          if (isTODO) {
+            console.error('[loadStressCheck] TODOシートのデータが返されました。GAS取得エラーです。keys:', JSON.stringify(firstKeys));
+            var errMsg = document.getElementById('sc-error-msg');
+            if (errMsg) { errMsg.textContent = 'ストレスチェック管理の取得に失敗しました（TODOシートのデータが返されています）'; errMsg.style.display = ''; }
+            if (loading) loading.style.display = 'none';
+            return;
+          }
         }
 
         scRows = mergeScData(scClients, scData);
