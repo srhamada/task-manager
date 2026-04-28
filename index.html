@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v57 (SC読込を並行fetch+確実マージに変更・タブ切替で常に最新表示)');
+  console.log('[app] コードバージョン: 2026-04-28-v58 (render直前ログ追加・ステータス保存値優先表示・マージ詳細ログ)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6466,6 +6466,10 @@
 
         console.log('[loadStressCheck] クライアント件数: ' + scClients.length);
         console.log('[loadStressCheck] 管理シート件数: ' + scData.length);
+        if (scData.length > 0) {
+          console.log('[loadStressCheck] 管理シートサンプル(keys):', JSON.stringify(Object.keys(scData[0])));
+          console.log('[loadStressCheck] 管理シートサンプル(値):', JSON.stringify(scData[0]));
+        }
 
         scRows = mergeScData(scClients, scData);
         stressCheckCache = scRows;
@@ -6566,9 +6570,14 @@
     if (!rows.length) { tbody.innerHTML = ''; if (empty) empty.style.display = ''; return; }
     if (empty) empty.style.display = 'none';
 
+    console.log('[render] 描画対象件数: ' + rows.length);
+    console.log('[render] rows:', JSON.stringify(rows.slice(0, 3)));
+
     tbody.innerHTML = rows.map(function(row) {
       var idx       = row._scIdx;
-      var status    = calcStressCheckStatus(row);
+      // 保存済みステータスがあればそれを表示、なければ日付から自動計算
+      var savedSt   = (row['ステータス'] || '').trim();
+      var status    = savedSt || calcStressCheckStatus(row);
       var meta      = SC_STATUS_MAP[status] || { cls: '', label: status };
       var isFlagged = String(row['重要フラグ'] || '').toUpperCase() === 'TRUE';
 
