@@ -174,7 +174,12 @@ function doPost(e) {
       return handleSaveBusySeasonRecords_(ss, data);
     }
 
-    // ── ストレスチェック管理 新規追加 ──
+    // ── ストレスチェック管理 一括保存（事業所名キー upsert） ──
+    if (data.action === 'saveStressCheckRecords') {
+      return handleSaveStressCheckRecords_(ss, data);
+    }
+
+    // ── ストレスチェック管理 新規追加（旧・互換のため残す） ──
     if (data.action === 'saveStressCheckRecord') {
       return handleSaveStressCheckRecord_(ss, data);
     }
@@ -721,6 +726,61 @@ function handleSaveBusySeasonRecords_(ss, data) {
 }
 
 // --------------- ストレスチェック管理 ---------------
+
+// 一括保存（事業所名をキーに upsert、算定年更管理の handleSaveBusySeasonRecords_ と同じ考え方）
+function handleSaveStressCheckRecords_(ss, data) {
+  var rows = data.rows;
+  if (!Array.isArray(rows)) {
+    return jsonResponse_({ success: false, error: 'rows が配列ではありません' });
+  }
+
+  var headers = ['事業所名','担当者','実施月','説明日','同意取得日','開始日','終了日',
+    '集団分析同意','集団分析同封','出力日','郵送日','ステータス','備考','重要フラグ','作成日','更新日'];
+
+  var sheet = ss.getSheetByName(SHEET_STRESS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_STRESS);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    Logger.log('[saveStressCheckRecords] シート新規作成');
+  }
+
+  Logger.log('[saveStressCheckRecords] 保存行数=' + rows.length);
+
+  // 既存データから作成日を事業所名キーで保持
+  var existingData    = sheet.getDataRange().getValues();
+  var existingHeaders = existingData[0];
+  var jigyoshoCol     = existingHeaders.indexOf('事業所名');
+  var sosakuCol       = existingHeaders.indexOf('作成日');
+  var createdMap      = {};
+  for (var i = 1; i < existingData.length; i++) {
+    var name = String(existingData[i][jigyoshoCol] || '').trim();
+    if (name) createdMap[name] = existingData[i][sosakuCol] || '';
+  }
+
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+
+  // 新しい行を構築（事業所名なし行はスキップ）
+  var newRows = [];
+  rows.forEach(function(row) {
+    var name = String(row['事業所名'] || '').trim();
+    if (!name) return;
+    newRows.push(headers.map(function(h) {
+      if (h === '更新日') return nowJST;
+      if (h === '作成日') return createdMap[name] || nowJST;
+      return row[h] !== undefined ? row[h] : '';
+    }));
+  });
+
+  // シートをクリアして書き直し（ヘッダー + データ）
+  sheet.clearContents();
+  var allRows = [headers].concat(newRows);
+  if (allRows.length > 0) {
+    sheet.getRange(1, 1, allRows.length, headers.length).setValues(allRows);
+  }
+
+  Logger.log('[saveStressCheckRecords] 保存完了: ' + newRows.length + '行');
+  return jsonResponse_({ success: true, savedCount: newRows.length });
+}
 
 // データ取得（全件）
 function handleGetStressCheckRecords_() {
