@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v61 (GAS_URL最新デプロイURLに更新)');
+  console.log('[app] コードバージョン: 2026-04-28-v62 (SC画面クライアント直接取得・normalizeYesフィルター)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6441,6 +6441,12 @@
     return mergeScData(clients, scData);
   }
 
+  // yes / YES / Yes / 全角ｙｅｓ を全て true に正規化
+  function normalizeYes(value) {
+    return String(value || '').trim().toLowerCase()
+      .replace(/[ｙＹ]/g, 'y').replace(/[ｅＥ]/g, 'e').replace(/[ｓＳ]/g, 's') === 'yes';
+  }
+
   // クライアントとSCデータを両方フェッチして確実にマージ
   function fetchStressCheckRecords() {
     var loading = document.getElementById('sc-loading');
@@ -6448,27 +6454,40 @@
     if (loading) loading.style.display = '';
     if (empty)   empty.style.display   = 'none';
 
-    // クライアントキャッシュに stressCheck=yes がいれば流用、なければ再フェッチ
-    var hasScClients = clientsCache.some(function(c) {
-      return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
-    });
-    var clientPromise = hasScClients ? Promise.resolve(clientsCache) : fetchClientsFromSheet();
-    var scSheetUrl    = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('ストレスチェック管理');
+    // クライアントを ?sheet=クライアント で直接取得（キャッシュ非依存）
+    var clientUrl = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('クライアント');
+    console.log('[loadStressCheck] クライアント取得URL:', clientUrl);
+    var clientPromise = fetch(clientUrl).then(function(res) { return res.json(); });
+
+    var scSheetUrl = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('ストレスチェック管理');
     console.log('[loadStressCheck] GAS_URL:', GAS_URL);
-    console.log('[loadStressCheck] fetch URL (実際):', scSheetUrl);
-    var scPromise     = fetch(scSheetUrl).then(function(res) { return res.json(); });
+    console.log('[loadStressCheck] SC取得URL:', scSheetUrl);
+    var scPromise  = fetch(scSheetUrl).then(function(res) { return res.json(); });
 
     return Promise.all([clientPromise, scPromise])
       .then(function(results) {
-        var allClients = Array.isArray(results[0]) ? results[0] : clientsCache;
+        var rawClients = Array.isArray(results[0]) ? results[0] : [];
         var scData     = Array.isArray(results[1]) ? results[1] : [];
 
-        var scClients = allClients.filter(function(c) {
-          return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
+        console.log('[loadStressCheck] クライアント取得件数:', rawClients.length);
+        console.log('[loadStressCheck] クライアントサンプルkeys:', JSON.stringify(Object.keys(rawClients[0] || {})));
+        console.log('[loadStressCheck] クライアントサンプル:', JSON.stringify(rawClients[0]));
+
+        // ストレスチェック=yes のアクティブクライアントのみ抽出
+        var scClients = rawClients.filter(function(row) {
+          var statusRaw = row['ステータス'] || row['status'] || '';
+          var status    = String(statusRaw).trim();
+          // 日本語ステータスと英語コード両対応
+          var isActive  = status === 'active' || status === '契約中';
+          var isSC      = normalizeYes(row['ストレスチェック'] || row['stressCheck']);
+          return isActive && isSC;
+        }).map(function(row) {
+          // mergeScData が期待する { name: '事業所名' } 形式に変換
+          return { name: String(row['会社名'] || row['name'] || '').trim() };
         });
 
-        console.log('[loadStressCheck] クライアント件数: ' + scClients.length);
-        console.log('[loadStressCheck] 管理シート件数: ' + scData.length);
+        console.log('[loadStressCheck] SC対象クライアント件数:', scClients.length);
+        console.log('[loadStressCheck] 管理シート件数:', scData.length);
         console.log('[loadStressCheck] 管理シートサンプル:', JSON.stringify(scData.slice(0, 3)));
 
         // TODOシートを誤取得していないか検出
@@ -6477,7 +6496,7 @@
           var firstKeys = Object.keys(scData[0]);
           var isTODO = TODO_MARKER_KEYS.some(function(k) { return firstKeys.indexOf(k) !== -1; });
           if (isTODO) {
-            console.error('[loadStressCheck] TODOシートのデータが返されました。GAS取得エラーです。keys:', JSON.stringify(firstKeys));
+            console.error('[loadStressCheck] TODOシートのデータが返されました。keys:', JSON.stringify(firstKeys));
             var errMsg = document.getElementById('sc-error-msg');
             if (errMsg) { errMsg.textContent = 'ストレスチェック管理の取得に失敗しました（TODOシートのデータが返されています）'; errMsg.style.display = ''; }
             if (loading) loading.style.display = 'none';
@@ -6488,7 +6507,7 @@
         scRows = mergeScData(scClients, scData);
         stressCheckCache = scRows;
 
-        console.log('[loadStressCheck] マージ後件数: ' + scRows.length);
+        console.log('[loadStressCheck] マージ後件数:', scRows.length);
         if (scRows.length > 0) {
           console.log('[loadStressCheck] マージ結果サンプル:', JSON.stringify(scRows[0]));
         }
