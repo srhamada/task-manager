@@ -734,7 +734,7 @@ function handleSaveStressCheckRecords_(ss, data) {
     return jsonResponse_({ success: false, error: 'rows が配列ではありません' });
   }
 
-  var headers = ['事業所名','担当者','実施月','説明日','同意取得日','開始日','終了日',
+  var headers = ['実施年度','事業所名','担当者','実施月','説明日','同意取得日','開始日','終了日',
     '集団分析同意','集団分析同封','出力日','郵送日','ステータス','備考','重要フラグ','作成日','更新日'];
 
   var sheet = ss.getSheetByName(SHEET_STRESS);

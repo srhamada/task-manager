@@ -1942,6 +1942,7 @@
         <thead>
           <tr>
             <th style="width:36px;">★</th>
+            <th style="min-width:56px;">実施年度</th>
             <th style="min-width:140px;">事業所名</th>
             <th style="min-width:80px;">担当者</th>
             <th style="min-width:90px;">実施月</th>
@@ -1968,7 +1969,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v52 (SCテーブルUI算定年更方式に変更)');
+  console.log('[app] コードバージョン: 2026-04-28-v53 (SC実施年度追加・担当者プルダウン・ステータス即時更新・SC対象フィルター)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6326,7 +6327,7 @@
 
   // ===== ストレスチェック管理 =====
 
-  var SC_HEADERS = ['事業所名','担当者','実施月','説明日','同意取得日','開始日','終了日',
+  var SC_HEADERS = ['実施年度','事業所名','担当者','実施月','説明日','同意取得日','開始日','終了日',
     '集団分析同意','集団分析同封','出力日','郵送日','ステータス','備考','重要フラグ','作成日','更新日'];
 
   var SC_STATUS_MAP = {
@@ -6387,9 +6388,11 @@
     return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
   }
 
-  // クライアント（契約中）と SC シートデータを事業所名で突合
+  // クライアント（契約中 かつ ストレスチェック=yes）と SC シートデータを事業所名で突合
   function buildScRows(scData) {
-    var clients = loadClients().filter(function(c) { return c.status === 'active'; });
+    var clients = loadClients().filter(function(c) {
+      return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
+    });
     // SCデータを事業所名でマップ化
     var scMap = {};
     scData.forEach(function(r) {
@@ -6449,10 +6452,12 @@
       });
   }
 
-  // 契約クライアントをscRowsに読み込む（算定年更管理の loadActiveClientsIntoBusySeason と同じ考え方）
+  // 契約クライアント（ストレスチェック=yes）をscRowsに読み込む
   function loadActiveClientsIntoSC() {
-    var clients = loadClients().filter(function(c) { return c.status === 'active'; });
-    if (!clients.length) { alert('契約中のクライアントがありません。'); return; }
+    var clients = loadClients().filter(function(c) {
+      return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
+    });
+    if (!clients.length) { alert('ストレスチェック対象の契約クライアントがありません。\n（クライアントシートのL列「ストレスチェック」に yes を設定してください）'); return; }
     var existing = {};
     scRows.forEach(function(r) { existing[r['事業所名']] = true; });
     var added = 0;
@@ -6542,21 +6547,29 @@
         return '<td class="' + cls + '" data-idx="' + idx + '" data-col="' + esc(col) + '" onclick="scDateEdit(this)"><span class="bs-date-display">' + esc(display) + '</span></td>';
       });
 
-      function selOpts(val) {
+      function circOpts(val) {
         return ['○','×'].map(function(o) {
           return '<option value="' + o + '"' + (val === o ? ' selected' : '') + '>' + o + '</option>';
         }).join('');
       }
+      var tanto = row['担当者'] || '';
+      var tantoSel =
+        '<select data-idx="' + idx + '" data-col="担当者" onchange="updateScCell(this)">' +
+        '<option value="">―</option>' +
+        '<option value="濱田"' + (tanto === '濱田' ? ' selected' : '') + '>濱田</option>' +
+        '<option value="髙嵜"' + (tanto === '髙嵜' ? ' selected' : '') + '>髙嵜</option>' +
+        '</select>';
 
       return '<tr>' +
         '<td style="text-align:center;"><input type="checkbox" data-idx="' + idx + '" data-col="重要フラグ" ' + (isFlagged ? 'checked' : '') + ' onchange="updateScFlagCell(this)" /></td>' +
+        '<td><input data-idx="' + idx + '" data-col="実施年度" value="' + esc(row['実施年度'] || '') + '" style="width:50px;" onchange="updateScCell(this)" /></td>' +
         '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="事業所名" value="' + esc(row['事業所名'] || '') + '" onchange="updateScCell(this)" /></td>' +
-        '<td><input data-idx="' + idx + '" data-col="担当者" value="' + esc(row['担当者'] || '') + '" style="width:70px;" onchange="updateScCell(this)" /></td>' +
+        '<td>' + tantoSel + '</td>' +
         '<td><input data-idx="' + idx + '" data-col="実施月" value="' + esc(row['実施月'] || '') + '" placeholder="yyyy-mm" style="width:80px;" onchange="updateScCell(this)" /></td>' +
-        '<td><span class="status-badge ' + meta.cls + '">' + meta.label + '</span></td>' +
+        '<td class="sc-status-cell"><span class="status-badge ' + meta.cls + '">' + meta.label + '</span></td>' +
         dateCells[0] + dateCells[1] + dateCells[2] + dateCells[3] +
-        '<td><select data-idx="' + idx + '" data-col="集団分析同意" onchange="updateScCell(this)"><option value="">―</option>' + selOpts(row['集団分析同意'] || '') + '</select></td>' +
-        '<td><select data-idx="' + idx + '" data-col="集団分析同封" onchange="updateScCell(this)"><option value="">―</option>' + selOpts(row['集団分析同封'] || '') + '</select></td>' +
+        '<td><select data-idx="' + idx + '" data-col="集団分析同意" onchange="updateScCell(this)"><option value="">―</option>' + circOpts(row['集団分析同意'] || '') + '</select></td>' +
+        '<td><select data-idx="' + idx + '" data-col="集団分析同封" onchange="updateScCell(this)"><option value="">―</option>' + circOpts(row['集団分析同封'] || '') + '</select></td>' +
         dateCells[4] + dateCells[5] +
         '<td class="bs-comment-cell"><input data-idx="' + idx + '" data-col="備考" value="' + esc(row['備考'] || '') + '" onchange="updateScCell(this)" /></td>' +
         '<td style="font-size:0.78rem;">' + esc(normalizeDate(row['更新日'])) + '</td>' +
@@ -6593,6 +6606,14 @@
       if (scRows[idx]) scRows[idx][col] = v;
       td.className = 'bs-step-cell' + (v ? '' : ' empty');
       td.innerHTML = '<span class="bs-date-display">' + esc(v) + '</span>';
+      // ステータスバッジを即時更新
+      var tr = td.closest('tr');
+      var statusTd = tr && tr.querySelector('.sc-status-cell');
+      if (statusTd && scRows[idx]) {
+        var newSt   = calcStressCheckStatus(scRows[idx]);
+        var newMeta = SC_STATUS_MAP[newSt] || { cls: '', label: newSt };
+        statusTd.innerHTML = '<span class="status-badge ' + newMeta.cls + '">' + newMeta.label + '</span>';
+      }
     }
     inp.addEventListener('blur', commit);
     inp.addEventListener('keydown', function(e) {
@@ -6609,6 +6630,7 @@
   function addScRow() {
     var row = {};
     SC_HEADERS.forEach(function(h) { row[h] = ''; });
+    row['実施年度'] = String(new Date().getFullYear());
     scRows.push(row);
     renderStressCheckTable();
     var tbody = document.getElementById('sc-tbody');
