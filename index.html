@@ -1930,6 +1930,7 @@
         <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="loadActiveClientsIntoSC()">契約クライアント読込</button>
         <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="addScRow()">＋ 行追加</button>
         <button class="btn btn-primary" id="sc-save-btn" style="font-size:0.88rem;" onclick="saveStressCheckRecords()">保存</button>
+        <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="downloadScCSV()">CSV出力</button>
         <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="fetchStressCheckRecords()">再読込</button>
         <span id="sc-save-msg" style="display:none;font-size:0.82rem;color:#2e7d32;font-weight:600;">保存しました</span>
         <span id="sc-error-msg" style="display:none;font-size:0.82rem;color:#c62828;font-weight:600;"></span>
@@ -1969,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v53 (SC実施年度追加・担当者プルダウン・ステータス即時更新・SC対象フィルター)');
+  console.log('[app] コードバージョン: 2026-04-28-v54 (SCにCSV出力機能追加)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6637,6 +6638,67 @@
     if (tbody && tbody.lastElementChild) {
       tbody.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  }
+
+  function downloadScCSV() {
+    var search       = ((document.getElementById('sc-search')       || {}).value || '').toLowerCase();
+    var filterStatus = (document.getElementById('sc-filter-status') || {}).value || '';
+    var filterTanto  = (document.getElementById('sc-filter-tanto')  || {}).value || '';
+    var filterMonth  = (document.getElementById('sc-filter-month')  || {}).value || '';
+
+    scRows.forEach(function(r, i) { r._scIdx = i; });
+    var rows = scRows.filter(function(r) {
+      var st = calcStressCheckStatus(r);
+      if (search       && String(r['事業所名'] || '').toLowerCase().indexOf(search) === -1) return false;
+      if (filterStatus && st !== filterStatus)                  return false;
+      if (filterTanto  && (r['担当者'] || '') !== filterTanto) return false;
+      if (filterMonth  && (r['実施月'] || '') !== filterMonth)  return false;
+      return true;
+    });
+
+    rows.sort(function(a, b) {
+      var fa = String(a['重要フラグ'] || '').toUpperCase() === 'TRUE' ? 0 : 1;
+      var fb = String(b['重要フラグ'] || '').toUpperCase() === 'TRUE' ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return String(a['実施月'] || '') > String(b['実施月'] || '') ? 1 : -1;
+    });
+
+    var DATE_COLS = ['説明日','同意取得日','開始日','終了日','出力日','郵送日'];
+    var COLS = ['実施年度','事業所名','担当者','実施月','ステータス',
+                '説明日','同意取得日','開始日','終了日',
+                '集団分析同意','集団分析同封','出力日','郵送日','重要フラグ','備考'];
+
+    function csvVal(v) {
+      var s = String(v === null || v === undefined ? '' : v);
+      if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    var lines = [COLS.map(csvVal).join(',')];
+    rows.forEach(function(r) {
+      var status = calcStressCheckStatus(r);
+      var vals = COLS.map(function(col) {
+        if (col === 'ステータス') return status;
+        if (DATE_COLS.indexOf(col) !== -1) return normalizeDate(r[col] || '').replace(/\//g, '-');
+        if (col === '重要フラグ') return String(r[col] || '').toUpperCase() === 'TRUE' ? '★' : '';
+        return r[col] || '';
+      });
+      lines.push(vals.map(csvVal).join(','));
+    });
+
+    var csv = '﻿' + lines.join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var t = new Date();
+    var ymd = t.getFullYear() + String(t.getMonth() + 1).padStart(2, '0') + String(t.getDate()).padStart(2, '0');
+    a.href = url;
+    a.download = 'stress_check_' + ymd + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); a.parentNode.removeChild(a); }, 1000);
   }
 
   // 全行一括保存（算定年更管理の saveBusySeasonRecords と同じ仕組み）
