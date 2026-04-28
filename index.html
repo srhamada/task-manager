@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v63 (SCフィルターデバッグログ・normalizeYes拡張・契約中判定柔軟化)');
+  console.log('[app] コードバージョン: 2026-04-28-v64 (実施年度デフォルト補完・実施月YYYY/MM統一・formatYearMonth追加)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6381,6 +6381,25 @@
     return m ? m[2] + '/' + m[3] : String(val);
   }
 
+  // 実施月を YYYY/MM 文字列に統一（GAS が日付型で返す場合も JST 補正）
+  function formatYearMonth(value) {
+    if (!value) return '';
+    var s = String(value);
+    // すでに YYYY/MM 形式
+    if (/^\d{4}\/\d{2}$/.test(s)) return s;
+    // YYYY-MM 形式
+    if (/^\d{4}-\d{2}$/.test(s)) return s.replace('-', '/');
+    // ISO 文字列（GAS が日付シリアルを変換した場合）→ JST 補正
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      var jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+      var y = jst.getUTCFullYear();
+      var m = String(jst.getUTCMonth() + 1).padStart(2, '0');
+      return y + '/' + m;
+    }
+    return s;
+  }
+
   // <input type="date"> 用に yyyy-MM-dd へ正規化
   function scToDateInput(val) {
     if (!val) return '';
@@ -6400,33 +6419,38 @@
 
     var rows = [];
 
+    var DEFAULT_NENDO = String(new Date().getFullYear());
+
+    function applyExistingFields(row, existing) {
+      SC_HEADERS.forEach(function(h) {
+        var v = existing[h];
+        if (v === undefined || v === null || String(v) === '') return;
+        row[h] = (h === '実施月') ? formatYearMonth(v) : String(v);
+      });
+      // 実施年度が空なら現在年でデフォルト補完
+      if (!row['実施年度']) row['実施年度'] = DEFAULT_NENDO;
+    }
+
     // クライアント一覧を基準に行を生成
     scClients.forEach(function(c) {
       var existing = scMap[c.name];
       var row = {};
       SC_HEADERS.forEach(function(h) { row[h] = ''; });
-      row['事業所名'] = c.name;
-      if (existing) {
-        SC_HEADERS.forEach(function(h) {
-          var v = existing[h];
-          if (v !== undefined && v !== null && String(v) !== '') row[h] = String(v);
-        });
-      }
+      row['事業所名']  = c.name;
+      row['実施年度'] = DEFAULT_NENDO;
+      if (existing) applyExistingFields(row, existing);
       rows.push(row);
-      delete scMap[c.name]; // マッチ済みは残り候補から除外
+      delete scMap[c.name];
     });
 
     // クライアント一覧にない事業所（シートのみに存在するデータ）も追加
     Object.keys(scMap).forEach(function(name) {
       if (!name) return;
-      var existing = scMap[name];
       var row = {};
       SC_HEADERS.forEach(function(h) { row[h] = ''; });
-      row['事業所名'] = name;
-      SC_HEADERS.forEach(function(h) {
-        var v = existing[h];
-        if (v !== undefined && v !== null && String(v) !== '') row[h] = String(v);
-      });
+      row['事業所名']  = name;
+      row['実施年度'] = DEFAULT_NENDO;
+      applyExistingFields(row, scMap[name]);
       rows.push(row);
     });
 
@@ -6655,10 +6679,10 @@
 
       return '<tr>' +
         '<td style="text-align:center;"><input type="checkbox" data-idx="' + idx + '" data-col="重要フラグ" ' + (isFlagged ? 'checked' : '') + ' onchange="updateScFlagCell(this)" /></td>' +
-        '<td><input data-idx="' + idx + '" data-col="実施年度" value="' + esc(row['実施年度'] || '') + '" style="width:50px;" onchange="updateScCell(this)" /></td>' +
+        '<td><input data-idx="' + idx + '" data-col="実施年度" value="' + esc(row['実施年度'] || String(new Date().getFullYear())) + '" style="width:50px;" onchange="updateScCell(this)" /></td>' +
         '<td class="bs-client-cell"><input data-idx="' + idx + '" data-col="事業所名" value="' + esc(row['事業所名'] || '') + '" onchange="updateScCell(this)" /></td>' +
         '<td>' + tantoSel + '</td>' +
-        '<td><input data-idx="' + idx + '" data-col="実施月" value="' + esc(row['実施月'] || '') + '" placeholder="yyyy-mm" style="width:80px;" onchange="updateScCell(this)" /></td>' +
+        '<td><input data-idx="' + idx + '" data-col="実施月" value="' + esc(formatYearMonth(row['実施月'])) + '" placeholder="yyyy/mm" style="width:80px;" onchange="updateScCell(this)" /></td>' +
         '<td class="sc-status-cell"><span class="status-badge ' + meta.cls + '">' + meta.label + '</span></td>' +
         dateCells[0] + dateCells[1] + dateCells[2] + dateCells[3] +
         '<td><select data-idx="' + idx + '" data-col="集団分析同意" onchange="updateScCell(this)"><option value="">―</option>' + circOpts(row['集団分析同意'] || '') + '</select></td>' +
@@ -6856,6 +6880,10 @@
       var copy = {};
       SC_SAVE_FIELDS.forEach(function(k) { copy[k] = r[k] || ''; });
       copy['ステータス'] = calcStressCheckStatus(r);
+      // 実施年度が空なら現在年で補完
+      if (!copy['実施年度']) copy['実施年度'] = String(new Date().getFullYear());
+      // 実施月を YYYY/MM 形式に統一
+      if (copy['実施月']) copy['実施月'] = formatYearMonth(copy['実施月']);
       return copy;
     }).filter(function(r) {
       var name = String(r['事業所名'] || '').trim();
