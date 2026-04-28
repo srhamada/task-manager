@@ -381,6 +381,19 @@
     /* 旧ステータス（後方互換） */
     .status-inactive { background: #fafafa; color: #9e9e9e; border: 1px solid #e0e0e0; }
     .status-new      { background: #e3f2fd; color: #1565c0; }
+    .status-complete { background: #e8f5e9; color: #2e7d32; }
+    .status-output   { background: #e0f7fa; color: #00695c; }
+
+    /* ストレスチェック 期限色 */
+    .sc-deadline-soon td { background: #fff8e1 !important; }
+    .sc-deadline-over td { background: #ffebee !important; }
+    .sc-deadline-soon:hover td { background: #fff3cd !important; }
+    .sc-deadline-over:hover td { background: #ffd7dc !important; }
+    /* 重要フラグ★ボタン */
+    .sc-star-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0 2px; transition: transform 0.15s; }
+    .sc-star-btn:hover { transform: scale(1.3); }
+    .sc-star-btn.active { color: #f9a825; }
+    .sc-star-btn:not(.active) { color: #ccc; }
 
     /* ===== 記録追加 ===== */
     .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
@@ -1897,15 +1910,22 @@
     <!-- 操作バー -->
     <div class="card" style="margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <input type="text" id="sc-search" class="form-input" placeholder="事業所名で検索" style="width:180px;" oninput="renderStressCheckTable()" />
+        <input type="text" id="sc-search" class="form-input" placeholder="事業所名で検索" style="width:160px;" oninput="renderStressCheckTable()" />
         <select id="sc-filter-status" class="form-select" style="width:130px;" onchange="renderStressCheckTable()">
           <option value="">すべてのステータス</option>
           <option value="未着手">未着手</option>
-          <option value="説明中">説明中</option>
+          <option value="説明済">説明済</option>
+          <option value="同意取得済">同意取得済</option>
           <option value="実施中">実施中</option>
-          <option value="集計中">集計中</option>
-          <option value="完了">完了</option>
-          <option value="中止">中止</option>
+          <option value="実施完了">実施完了</option>
+          <option value="出力済">出力済</option>
+          <option value="郵送済">郵送済</option>
+        </select>
+        <select id="sc-filter-tanto" class="form-select" style="width:110px;" onchange="renderStressCheckTable()">
+          <option value="">担当者: 全員</option>
+        </select>
+        <select id="sc-filter-month" class="form-select" style="width:120px;" onchange="renderStressCheckTable()">
+          <option value="">実施月: 全件</option>
         </select>
         <button class="btn btn-primary" style="font-size:0.88rem;" onclick="openStressCheckForm(null)">＋ 新規登録</button>
         <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="fetchStressCheckRecords()">更新</button>
@@ -1923,10 +1943,9 @@
             <th>実施月</th>
             <th>担当者</th>
             <th>ステータス</th>
-            <th>開始日</th>
-            <th>終了日</th>
-            <th>郵送日</th>
-            <th style="width:80px;"></th>
+            <th>期限日</th>
+            <th style="width:40px;">★</th>
+            <th style="width:60px;"></th>
           </tr>
         </thead>
         <tbody id="sc-tbody"></tbody>
@@ -1959,15 +1978,16 @@
             <input type="month" id="sc-f-jisshiMonth" class="form-input" />
           </div>
           <div class="form-group">
-            <label class="form-label">ステータス</label>
-            <select id="sc-f-status" class="form-select">
-              <option value="未着手">未着手</option>
-              <option value="説明中">説明中</option>
-              <option value="実施中">実施中</option>
-              <option value="集計中">集計中</option>
-              <option value="完了">完了</option>
-              <option value="中止">中止</option>
-            </select>
+            <label class="form-label">ステータス（自動）</label>
+            <div id="sc-f-status-display" style="padding:10px 14px;background:#f5f5f5;border-radius:10px;font-size:0.88rem;color:#5a7a5e;min-height:40px;display:flex;align-items:center;">
+              <span id="sc-f-status-badge"></span>
+            </div>
+          </div>
+          <div class="form-group" style="align-self:flex-end;">
+            <label class="form-label" style="cursor:pointer;">
+              <input type="checkbox" id="sc-f-flag" style="margin-right:6px;" />
+              重要フラグ ★
+            </label>
           </div>
           <div class="form-group">
             <label class="form-label">説明日</label>
@@ -6383,16 +6403,48 @@
 
   // ===== ストレスチェック管理 =====
 
-  var SC_STATUS_COLORS = {
-    '未着手': 'status-new',
-    '説明中': 'status-prospect',
-    '実施中': 'status-inprogress',
-    '集計中': 'status-waiting',
-    '完了':   'status-active',
-    '中止':   'status-terminated'
+  var SC_STATUS_MAP = {
+    '未着手':    { cls: 'status-new',        label: '未着手'    },
+    '説明済':    { cls: 'status-prospect',   label: '説明済'    },
+    '同意取得済': { cls: 'status-waiting',   label: '同意取得済' },
+    '実施中':    { cls: 'status-inprogress', label: '実施中'    },
+    '実施完了':  { cls: 'status-complete',   label: '実施完了'  },
+    '出力済':    { cls: 'status-output',     label: '出力済'    },
+    '郵送済':    { cls: 'status-active',     label: '郵送済'    }
   };
 
   var stressCheckCache = [];
+
+  // 日付フィールドからステータスを自動判定
+  function calcStressCheckStatus(r) {
+    if (r['郵送日'])     return '郵送済';
+    if (r['出力日'])     return '出力済';
+    if (r['終了日'])     return '実施完了';
+    if (r['開始日'])     return '実施中';
+    if (r['同意取得日']) return '同意取得済';
+    if (r['説明日'])     return '説明済';
+    return '未着手';
+  }
+
+  // 期限日を決定（郵送日 > 終了日 の優先順）
+  function scDeadlineDate(r) {
+    return r['郵送日'] || r['終了日'] || '';
+  }
+
+  // 今日との差分から行クラスを返す
+  function scDeadlineClass(dateStr) {
+    if (!dateStr) return '';
+    var m = String(dateStr).match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
+    if (!m) return '';
+    var deadline = new Date(m[1] + '-' + m[2] + '-' + m[3]);
+    var today    = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadline.setHours(0, 0, 0, 0);
+    var diff = Math.floor((deadline - today) / 86400000);
+    if (diff < 0)  return 'sc-deadline-over';
+    if (diff <= 7) return 'sc-deadline-soon';
+    return '';
+  }
 
   function fetchStressCheckRecords() {
     var loading = document.getElementById('sc-loading');
@@ -6403,6 +6455,7 @@
       .then(function(res) { return res.json(); })
       .then(function(rows) {
         stressCheckCache = Array.isArray(rows) ? rows : [];
+        scBuildFilters();
         renderStressCheckTable();
       })
       .catch(function(e) {
@@ -6411,19 +6464,59 @@
       });
   }
 
+  // 担当者・実施月のフィルター選択肢を動的生成
+  function scBuildFilters() {
+    var tantos = [];
+    var months = [];
+    stressCheckCache.forEach(function(r) {
+      var t = (r['担当者'] || '').trim();
+      var mo = (r['実施月'] || '').trim();
+      if (t && tantos.indexOf(t) === -1) tantos.push(t);
+      if (mo && months.indexOf(mo) === -1) months.push(mo);
+    });
+    tantos.sort();
+    months.sort().reverse();
+
+    var tantoSel = document.getElementById('sc-filter-tanto');
+    var monthSel = document.getElementById('sc-filter-month');
+    if (!tantoSel || !monthSel) return;
+
+    var curTanto = tantoSel.value;
+    var curMonth = monthSel.value;
+    tantoSel.innerHTML = '<option value="">担当者: 全員</option>' +
+      tantos.map(function(t) { return '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
+    monthSel.innerHTML = '<option value="">実施月: 全件</option>' +
+      months.map(function(m) { return '<option value="' + esc(m) + '">' + esc(m) + '</option>'; }).join('');
+    tantoSel.value = curTanto;
+    monthSel.value = curMonth;
+  }
+
   function renderStressCheckTable() {
     var loading = document.getElementById('sc-loading');
     var empty   = document.getElementById('sc-empty');
     var tbody   = document.getElementById('sc-tbody');
     if (!tbody) return;
 
-    var search       = (document.getElementById('sc-search')        ? document.getElementById('sc-search').value        : '').toLowerCase();
-    var filterStatus = (document.getElementById('sc-filter-status') ? document.getElementById('sc-filter-status').value : '');
+    var search       = ((document.getElementById('sc-search')        || {}).value || '').toLowerCase();
+    var filterStatus = (document.getElementById('sc-filter-status')  || {}).value || '';
+    var filterTanto  = (document.getElementById('sc-filter-tanto')   || {}).value || '';
+    var filterMonth  = (document.getElementById('sc-filter-month')   || {}).value || '';
 
     var rows = stressCheckCache.filter(function(r) {
+      var autoStatus = calcStressCheckStatus(r);
       if (search && String(r['事業所名'] || '').toLowerCase().indexOf(search) === -1) return false;
-      if (filterStatus && r['ステータス'] !== filterStatus) return false;
+      if (filterStatus && autoStatus !== filterStatus) return false;
+      if (filterTanto  && (r['担当者'] || '') !== filterTanto) return false;
+      if (filterMonth  && (r['実施月'] || '') !== filterMonth) return false;
       return true;
+    });
+
+    // 重要フラグ優先でソート、次に実施月昇順
+    rows.sort(function(a, b) {
+      var fa = String(a['重要フラグ'] || '').toUpperCase() === 'TRUE' ? 0 : 1;
+      var fb = String(b['重要フラグ'] || '').toUpperCase() === 'TRUE' ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return String(a['実施月'] || '') > String(b['実施月'] || '') ? 1 : -1;
     });
 
     if (loading) loading.style.display = 'none';
@@ -6437,16 +6530,25 @@
 
     var html = '';
     rows.forEach(function(r) {
-      var statusClass = SC_STATUS_COLORS[r['ステータス']] || '';
-      var id = esc(String(r['ID'] || ''));
-      html += '<tr>';
+      var status      = calcStressCheckStatus(r);
+      var meta        = SC_STATUS_MAP[status] || { cls: '', label: status };
+      var id          = esc(String(r['ID'] || ''));
+      var deadline    = scDeadlineDate(r);
+      var dlClass     = scDeadlineClass(deadline);
+      var isFlagged   = String(r['重要フラグ'] || '').toUpperCase() === 'TRUE';
+      var starClass   = isFlagged ? 'active' : '';
+      var starTitle   = isFlagged ? '重要フラグ解除' : '重要フラグ設定';
+      var dlText      = deadline ? scDateShort(deadline) : '';
+      // 期限超過/近い時は日付に色を添える
+      var dlStyle     = dlClass === 'sc-deadline-over' ? 'color:#c62828;font-weight:700;' :
+                        dlClass === 'sc-deadline-soon' ? 'color:#e65100;font-weight:700;' : '';
+      html += '<tr class="' + dlClass + '">';
       html += '<td>' + esc(r['事業所名'] || '') + '</td>';
       html += '<td>' + esc(r['実施月'] || '') + '</td>';
       html += '<td>' + esc(r['担当者'] || '') + '</td>';
-      html += '<td><span class="status-badge ' + statusClass + '">' + esc(r['ステータス'] || '') + '</span></td>';
-      html += '<td>' + esc(scDateShort(r['開始日'])) + '</td>';
-      html += '<td>' + esc(scDateShort(r['終了日'])) + '</td>';
-      html += '<td>' + esc(scDateShort(r['郵送日'])) + '</td>';
+      html += '<td><span class="status-badge ' + meta.cls + '">' + meta.label + '</span></td>';
+      html += '<td style="' + dlStyle + '">' + esc(dlText) + '</td>';
+      html += '<td style="text-align:center;"><button class="sc-star-btn ' + starClass + '" title="' + starTitle + '" onclick="toggleStressFlag(' + id + ')">★</button></td>';
       html += '<td><button class="btn btn-secondary" style="font-size:0.78rem;padding:4px 10px;" onclick="openStressCheckForm(' + id + ')">編集</button></td>';
       html += '</tr>';
     });
@@ -6469,6 +6571,22 @@
     return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
   }
 
+  // モーダルのステータスバッジを更新する
+  function scUpdateModalStatus() {
+    var r = {
+      '説明日':     document.getElementById('sc-f-setsumei')    ? document.getElementById('sc-f-setsumei').value    : '',
+      '同意取得日': document.getElementById('sc-f-doi')         ? document.getElementById('sc-f-doi').value         : '',
+      '開始日':     document.getElementById('sc-f-kaishi')      ? document.getElementById('sc-f-kaishi').value      : '',
+      '終了日':     document.getElementById('sc-f-shuryo')      ? document.getElementById('sc-f-shuryo').value      : '',
+      '出力日':     document.getElementById('sc-f-shutsuryoku') ? document.getElementById('sc-f-shutsuryoku').value : '',
+      '郵送日':     document.getElementById('sc-f-yuso')        ? document.getElementById('sc-f-yuso').value        : ''
+    };
+    var status = calcStressCheckStatus(r);
+    var meta   = SC_STATUS_MAP[status] || { cls: '', label: status };
+    var badge  = document.getElementById('sc-f-status-badge');
+    if (badge) badge.innerHTML = '<span class="status-badge ' + meta.cls + '">' + meta.label + '</span>';
+  }
+
   function openStressCheckForm(id) {
     var isNew = (id === null || id === undefined);
     document.getElementById('sc-modal-title').textContent = isNew ? 'ストレスチェック新規登録' : 'ストレスチェック編集';
@@ -6481,9 +6599,16 @@
       var el = document.getElementById(fid);
       if (el) el.value = '';
     });
-    document.getElementById('sc-f-status').value     = '未着手';
-    document.getElementById('sc-f-groupAgree').value = '';
+    var flagEl = document.getElementById('sc-f-flag');
+    if (flagEl) flagEl.checked = false;
+    document.getElementById('sc-f-groupAgree').value   = '';
     document.getElementById('sc-f-groupEnclose').value = '';
+
+    // 日付入力フィールドにonchange連携
+    ['sc-f-setsumei','sc-f-doi','sc-f-kaishi','sc-f-shuryo','sc-f-shutsuryoku','sc-f-yuso'].forEach(function(fid) {
+      var el = document.getElementById(fid);
+      if (el) el.onchange = scUpdateModalStatus;
+    });
 
     if (!isNew) {
       var r = stressCheckCache.find(function(row) { return String(row['ID']) === String(id); });
@@ -6491,7 +6616,6 @@
         document.getElementById('sc-f-jigyosho').value    = r['事業所名']   || '';
         document.getElementById('sc-f-tanto').value       = r['担当者']     || '';
         document.getElementById('sc-f-jisshiMonth').value = r['実施月']     || '';
-        document.getElementById('sc-f-status').value      = r['ステータス'] || '未着手';
         document.getElementById('sc-f-setsumei').value    = scToDateInput(r['説明日']);
         document.getElementById('sc-f-doi').value         = scToDateInput(r['同意取得日']);
         document.getElementById('sc-f-kaishi').value      = scToDateInput(r['開始日']);
@@ -6501,9 +6625,11 @@
         document.getElementById('sc-f-shutsuryoku').value = scToDateInput(r['出力日']);
         document.getElementById('sc-f-yuso').value        = scToDateInput(r['郵送日']);
         document.getElementById('sc-f-biko').value        = r['備考'] || '';
+        if (flagEl) flagEl.checked = String(r['重要フラグ'] || '').toUpperCase() === 'TRUE';
       }
     }
 
+    scUpdateModalStatus();
     onGroupAgreeChange();
     document.getElementById('sc-modal').style.display = 'flex';
   }
@@ -6530,21 +6656,35 @@
 
     var id    = document.getElementById('sc-form-id').value;
     var isNew = !id;
+    var flagEl = document.getElementById('sc-f-flag');
+    var flagVal = (flagEl && flagEl.checked) ? 'TRUE' : 'FALSE';
+
+    // ステータスを日付フィールドから自動計算
+    var fieldValues = {
+      '説明日':     document.getElementById('sc-f-setsumei').value     || '',
+      '同意取得日': document.getElementById('sc-f-doi').value          || '',
+      '開始日':     document.getElementById('sc-f-kaishi').value       || '',
+      '終了日':     document.getElementById('sc-f-shuryo').value       || '',
+      '出力日':     document.getElementById('sc-f-shutsuryoku').value  || '',
+      '郵送日':     document.getElementById('sc-f-yuso').value         || ''
+    };
+    var autoStatus = calcStressCheckStatus(fieldValues);
 
     var payload = {
       action:       isNew ? 'saveStressCheckRecord' : 'updateStressCheckRecord',
       '事業所名':   jigyosho,
       '担当者':     document.getElementById('sc-f-tanto').value        || '',
       '実施月':     document.getElementById('sc-f-jisshiMonth').value  || '',
-      '説明日':     document.getElementById('sc-f-setsumei').value     || '',
-      '同意取得日': document.getElementById('sc-f-doi').value          || '',
-      '開始日':     document.getElementById('sc-f-kaishi').value       || '',
-      '終了日':     document.getElementById('sc-f-shuryo').value       || '',
-      '集団分析同意': document.getElementById('sc-f-groupAgree').value    || '',
-      '集団分析同封': document.getElementById('sc-f-groupEnclose').value  || '',
-      '出力日':     document.getElementById('sc-f-shutsuryoku').value  || '',
-      '郵送日':     document.getElementById('sc-f-yuso').value         || '',
-      'ステータス': document.getElementById('sc-f-status').value       || '未着手',
+      '説明日':     fieldValues['説明日'],
+      '同意取得日': fieldValues['同意取得日'],
+      '開始日':     fieldValues['開始日'],
+      '終了日':     fieldValues['終了日'],
+      '集団分析同意': document.getElementById('sc-f-groupAgree').value  || '',
+      '集団分析同封': document.getElementById('sc-f-groupEnclose').value || '',
+      '出力日':     fieldValues['出力日'],
+      '郵送日':     fieldValues['郵送日'],
+      'ステータス': autoStatus,
+      '重要フラグ': flagVal,
       '備考':       document.getElementById('sc-f-biko').value         || ''
     };
     if (!isNew) payload['ID'] = parseInt(id, 10);
@@ -6583,11 +6723,47 @@
     });
   }
 
+  // 重要フラグをクリック即時切り替え
+  function toggleStressFlag(id) {
+    var r = stressCheckCache.find(function(row) { return String(row['ID']) === String(id); });
+    if (!r) return;
+    var newFlag = String(r['重要フラグ'] || '').toUpperCase() === 'TRUE' ? 'FALSE' : 'TRUE';
+    r['重要フラグ'] = newFlag;
+    renderStressCheckTable();
+
+    var autoStatus = calcStressCheckStatus(r);
+    var payload = {
+      action: 'updateStressCheckRecord',
+      ID: parseInt(id, 10),
+      '重要フラグ': newFlag,
+      '事業所名':   r['事業所名']   || '',
+      '担当者':     r['担当者']     || '',
+      '実施月':     r['実施月']     || '',
+      '説明日':     r['説明日']     || '',
+      '同意取得日': r['同意取得日'] || '',
+      '開始日':     r['開始日']     || '',
+      '終了日':     r['終了日']     || '',
+      '出力日':     r['出力日']     || '',
+      '郵送日':     r['郵送日']     || '',
+      '集団分析同意': r['集団分析同意'] || '',
+      '集団分析同封': r['集団分析同封'] || '',
+      'ステータス': autoStatus,
+      '備考':       r['備考'] || ''
+    };
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function(res) { return res.json(); })
+      .catch(function(e) { console.error('[toggleStressFlag] エラー:', e); });
+  }
+
   function initStressCheckPage() {
     // 初回のみ fetch、以降はキャッシュ再描画
     if (!stressCheckCache.length) {
       fetchStressCheckRecords();
     } else {
+      scBuildFilters();
       renderStressCheckTable();
     }
   }
