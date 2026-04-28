@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v55 (SC保存ログ強化・エラーハンドリング改善)');
+  console.log('[app] コードバージョン: 2026-04-28-v56 (SC保存をupdateRow+appendRowに変更・TODOフォールスルー対策)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6701,7 +6701,57 @@
     setTimeout(function() { URL.revokeObjectURL(url); a.parentNode.removeChild(a); }, 1000);
   }
 
-  // 全行一括保存（算定年更管理の saveBusySeasonRecords と同じ仕組み）
+  // 保存対象フィールド（作成日・更新日はGAS側で自動設定）
+  var SC_SAVE_FIELDS = ['実施年度','事業所名','担当者','実施月','説明日','同意取得日','開始日','終了日',
+    '集団分析同意','集団分析同封','出力日','郵送日','ステータス','備考','重要フラグ'];
+
+  // 1行を updateRow で送信し、行が存在しなければ appendRow で新規追加
+  function scSaveOneRow_(row) {
+    var payload = { action: 'updateRow', sheet: 'ストレスチェック管理', updateKey: '事業所名' };
+    SC_SAVE_FIELDS.forEach(function(k) { payload[k] = row[k] || ''; });
+    console.log('[saveStressCheck] 送信payload:', JSON.stringify(payload));
+
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then(function(result) {
+      console.log('[saveStressCheck] GASレスポンス:', JSON.stringify(result));
+      console.log('[saveStressCheck] response.sheetName:', result.sheetName || '(なし)');
+
+      // 安全確認：TODOに書かれた場合は即エラー
+      if (result.sheetName === 'TODO') {
+        return { row: row, success: false, error: 'ストレスチェック管理ではなくTODOに保存されています' };
+      }
+      // updateRow 成功
+      if (result.updatedRow) {
+        return { row: row, success: true };
+      }
+      // 既存行なし（「該当ID(...) が見つかりません」） → appendRow で新規追加
+      if (result.error && result.error.indexOf('該当ID') !== -1) {
+        var appendPayload = { sheet: 'ストレスチェック管理' };
+        SC_SAVE_FIELDS.forEach(function(k) { appendPayload[k] = row[k] || ''; });
+        console.log('[saveStressCheck] 送信payload (append):', JSON.stringify(appendPayload));
+        return fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(appendPayload)
+        })
+        .then(function(res2) { return res2.json(); })
+        .then(function(r2) {
+          console.log('[saveStressCheck] GASレスポンス (append):', JSON.stringify(r2));
+          if (r2.sheetName === 'ストレスチェック管理' && r2.success === true) return { row: row, success: true };
+          if (r2.sheetName === 'TODO') return { row: row, success: false, error: '新規追加先がTODOになっています' };
+          return { row: row, success: false, error: r2.error || 'append失敗' };
+        });
+      }
+      return { row: row, success: false, error: result.error || '不明なエラー' };
+    });
+  }
+
+  // 全行一括保存（行ごとに updateRow → 存在しなければ appendRow）
   function saveStressCheckRecords() {
     var btn    = document.getElementById('sc-save-btn');
     var msg    = document.getElementById('sc-save-msg');
@@ -6710,52 +6760,39 @@
     if (msg)    msg.style.display    = 'none';
     if (errMsg) errMsg.style.display = 'none';
 
-    // 保存前にステータスを全行再計算（事業所名が空の行はスキップ）
     var rowsToSave = scRows.map(function(r) {
       var copy = {};
-      SC_HEADERS.forEach(function(h) { copy[h] = r[h] || ''; });
+      SC_SAVE_FIELDS.forEach(function(k) { copy[k] = r[k] || ''; });
       copy['ステータス'] = calcStressCheckStatus(r);
       return copy;
     }).filter(function(r) {
       var name = String(r['事業所名'] || '').trim();
-      if (!name) console.warn('[saveStressCheck] 保存失敗行: 事業所名なし行をスキップ → ', JSON.stringify(r));
+      if (!name) console.warn('[saveStressCheck] 保存失敗行: 事業所名なし → ', JSON.stringify(r));
       return name !== '';
     });
 
     console.log('[saveStressCheck] 保存対象件数: ' + rowsToSave.length);
 
     if (rowsToSave.length === 0) {
-      var emptyMsg = '保存対象データがありません（事業所名が空の行はスキップ）';
-      console.warn('[saveStressCheck] ' + emptyMsg);
-      if (errMsg) { errMsg.textContent = emptyMsg; errMsg.style.display = ''; }
+      if (errMsg) { errMsg.textContent = '保存対象データがありません（事業所名が空の行はスキップ）'; errMsg.style.display = ''; }
       if (btn)    { btn.disabled = false; btn.textContent = '保存'; }
       return;
     }
 
-    var postData = { action: 'saveStressCheckRecords', rows: rowsToSave };
-    console.log('[saveStressCheck] 送信payload:', JSON.stringify(postData));
-    console.log('[saveStressCheck] GAS_URL:', typeof GAS_URL !== 'undefined' ? GAS_URL : '★未定義');
-
-    fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(postData)
-    })
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(function(result) {
-      console.log('[saveStressCheck] GASレスポンス:', JSON.stringify(result));
-      if (!result || result.success !== true) {
-        var detail = result ? (result.error || result.message || '不明') : 'レスポンスなし';
-        console.warn('[saveStressCheck] 保存失敗: ' + detail);
-        if (errMsg) { errMsg.textContent = '保存失敗: ' + detail; errMsg.style.display = ''; }
-        return;
+    Promise.all(rowsToSave.map(scSaveOneRow_))
+    .then(function(results) {
+      var failures = results.filter(function(r) { return !r.success; });
+      console.log('[saveStressCheck] 完了: 成功=' + (results.length - failures.length) + '件, 失敗=' + failures.length + '件');
+      if (failures.length > 0) {
+        failures.forEach(function(f) {
+          console.warn('[saveStressCheck] 保存失敗行: 事業所名=' + f.row['事業所名'] + ', エラー=' + f.error);
+        });
+        var names = failures.map(function(f) { return f.row['事業所名'] + '（' + f.error + '）'; }).join('、');
+        if (errMsg) { errMsg.textContent = failures.length + '件の保存に失敗: ' + names; errMsg.style.display = ''; }
+      } else {
+        if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
+        fetchStressCheckRecords();
       }
-      console.log('[saveStressCheck] 保存成功: ' + (result.savedCount || rowsToSave.length) + '行');
-      if (msg) { msg.style.display = ''; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
-      fetchStressCheckRecords();
     })
     .catch(function(e) {
       console.error('[saveStressCheck] 通信エラー:', e.message || String(e));
