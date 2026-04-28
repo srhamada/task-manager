@@ -6735,12 +6735,16 @@
     r['重要フラグ'] = newFlag;
     renderStressCheckTable();
 
-    // 重要フラグ専用アクションで最小限のデータだけ送信
+    // 算定年更管理と同じ updateRow アクション（デプロイ済み）を使用
     var payload = {
-      action:     'updateStressCheckFlag',
-      ID:         parseInt(id, 10),
+      action:      'updateRow',
+      sheet:       'ストレスチェック管理',
+      updateKey:   'ID',
+      ID:          parseInt(id, 10),
       '重要フラグ': newFlag
     };
+
+    console.log('[toggleStressFlag] 送信payload:', JSON.stringify(payload));
 
     fetch(GAS_URL, {
       method: 'POST',
@@ -6749,21 +6753,19 @@
     })
     .then(function(res) { return res.json(); })
     .then(function(result) {
-      if (result.success) {
+      console.log('[toggleStressFlag] GASレスポンス:', JSON.stringify(result));
+      if (result && result.success === true) {
         var msg = document.getElementById('sc-save-msg');
         if (msg) {
           msg.textContent = newFlag === 'TRUE' ? '★ 重要フラグを設定しました' : '★ 重要フラグを解除しました';
           msg.style.display = '';
-          setTimeout(function() {
-            msg.textContent = '保存しました';
-            msg.style.display = 'none';
-          }, 2000);
+          setTimeout(function() { msg.textContent = '保存しました'; msg.style.display = 'none'; }, 2000);
         }
       } else {
         // 保存失敗：キャッシュをロールバックして再描画
         r['重要フラグ'] = prevFlag;
         renderStressCheckTable();
-        var errMsg = result.message || result.error || '不明なエラー';
+        var errMsg = result && (result.error || result.message) || '不明なエラー';
         console.error('[toggleStressFlag] 保存失敗:', errMsg);
         scShowError('重要フラグの保存に失敗しました：' + errMsg);
       }
