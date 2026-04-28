@@ -1970,7 +1970,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-04-28-v56 (SC保存をupdateRow+appendRowに変更・TODOフォールスルー対策)');
+  console.log('[app] コードバージョン: 2026-04-28-v57 (SC読込を並行fetch+確実マージに変更・タブ切替で常に最新表示)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -6389,33 +6389,34 @@
     return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
   }
 
-  // クライアント（契約中 かつ ストレスチェック=yes）と SC シートデータを事業所名で突合
-  function buildScRows(scData) {
-    var clients = loadClients().filter(function(c) {
-      return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
-    });
-    // SCデータを事業所名でマップ化
+  // クライアントリストと SC シートデータを事業所名でマージ（両者とも引数で受け取る）
+  function mergeScData(scClients, scData) {
+    // SC シートデータを事業所名でマップ化
     var scMap = {};
     scData.forEach(function(r) {
       var name = String(r['事業所名'] || '').trim();
       if (name) scMap[name] = r;
     });
+
     var rows = [];
-    // 契約中クライアントを先に追加
-    clients.forEach(function(c) {
+
+    // クライアント一覧を基準に行を生成
+    scClients.forEach(function(c) {
       var existing = scMap[c.name];
       var row = {};
       SC_HEADERS.forEach(function(h) { row[h] = ''; });
       row['事業所名'] = c.name;
       if (existing) {
         SC_HEADERS.forEach(function(h) {
-          if (existing[h] !== undefined) row[h] = String(existing[h]);
+          var v = existing[h];
+          if (v !== undefined && v !== null && String(v) !== '') row[h] = String(v);
         });
       }
       rows.push(row);
-      delete scMap[c.name];
+      delete scMap[c.name]; // マッチ済みは残り候補から除外
     });
-    // 残り（クライアント一覧にない事業所）も追加
+
+    // クライアント一覧にない事業所（シートのみに存在するデータ）も追加
     Object.keys(scMap).forEach(function(name) {
       if (!name) return;
       var existing = scMap[name];
@@ -6423,32 +6424,62 @@
       SC_HEADERS.forEach(function(h) { row[h] = ''; });
       row['事業所名'] = name;
       SC_HEADERS.forEach(function(h) {
-        if (existing[h] !== undefined) row[h] = String(existing[h]);
+        var v = existing[h];
+        if (v !== undefined && v !== null && String(v) !== '') row[h] = String(v);
       });
       rows.push(row);
     });
+
     return rows;
   }
 
+  // ローカルキャッシュからのビルド（loadActiveClientsIntoSC 等から呼ぶ用）
+  function buildScRows(scData) {
+    var clients = loadClients().filter(function(c) {
+      return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
+    });
+    return mergeScData(clients, scData);
+  }
+
+  // クライアントとSCデータを両方フェッチして確実にマージ
   function fetchStressCheckRecords() {
     var loading = document.getElementById('sc-loading');
     var empty   = document.getElementById('sc-empty');
     if (loading) loading.style.display = '';
     if (empty)   empty.style.display   = 'none';
-    console.log('[stressCheck] 取得開始');
-    return fetch(GAS_URL + '?action=getStressCheckRecords')
-      .then(function(res) { return res.json(); })
-      .then(function(rows) {
-        if (!Array.isArray(rows)) rows = [];
-        console.log('[stressCheck] シート取得件数: ' + rows.length);
-        scRows = buildScRows(rows);
-        stressCheckCache = scRows; // エイリアス同期
-        console.log('[stressCheck] 突合後表示行数: ' + scRows.length);
+
+    // クライアントキャッシュに stressCheck=yes がいれば流用、なければ再フェッチ
+    var hasScClients = clientsCache.some(function(c) {
+      return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
+    });
+    var clientPromise = hasScClients ? Promise.resolve(clientsCache) : fetchClientsFromSheet();
+    var scPromise     = fetch(GAS_URL + '?action=getStressCheckRecords').then(function(res) { return res.json(); });
+
+    return Promise.all([clientPromise, scPromise])
+      .then(function(results) {
+        var allClients = Array.isArray(results[0]) ? results[0] : clientsCache;
+        var scData     = Array.isArray(results[1]) ? results[1] : [];
+
+        var scClients = allClients.filter(function(c) {
+          return c.status === 'active' && String(c.stressCheck || '').toLowerCase() === 'yes';
+        });
+
+        console.log('[loadStressCheck] クライアント件数: ' + scClients.length);
+        console.log('[loadStressCheck] 管理シート件数: ' + scData.length);
+
+        scRows = mergeScData(scClients, scData);
+        stressCheckCache = scRows;
+
+        console.log('[loadStressCheck] マージ後件数: ' + scRows.length);
+        if (scRows.length > 0) {
+          console.log('[loadStressCheck] マージ結果サンプル:', JSON.stringify(scRows[0]));
+        }
+
         scBuildFilters();
         renderStressCheckTable();
       })
       .catch(function(e) {
-        console.error('[stressCheck] 取得失敗:', e);
+        console.error('[loadStressCheck] 取得失敗:', e);
         if (loading) loading.style.display = 'none';
       });
   }
@@ -6813,12 +6844,7 @@
   }
 
   function initStressCheckPage() {
-    if (!scRows.length) {
-      fetchStressCheckRecords();
-    } else {
-      scBuildFilters();
-      renderStressCheckTable();
-    }
+    fetchStressCheckRecords();
   }
 
   // ===== 初期化 =====
