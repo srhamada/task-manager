@@ -15,6 +15,9 @@ var SHEET_STRESS  = 'ストレスチェック管理';
 var SHEET_ACTIVITY = 'アクティビティログ';
 var SHEET_HOLIDAY  = '休日マスタ';
 var SHEET_MESSAGE  = '一言メッセージ';
+var SHEET_FEE_MASTER   = '顧問料設定';
+var SHEET_FEE_MONTHLY  = '月別請求管理';
+var SHEET_WORK_AVAIL   = '勤務予定DB';
 
 // 給与計算系の業務種別（ここに追加すれば分岐が増やせる）
 var PAYROLL_CATEGORIES = ['給与計算', '賞与計算', '給与修正・再計算', '会計入力'];
@@ -62,6 +65,8 @@ function doGet(e) {
   if (action === 'getHolidayMaster')      return handleGetHolidayMaster_();
   if (action === 'getMemberStatuses')     return handleGetMemberStatuses_();
   if (action === 'getMessages')           return handleGetMessages_();
+  if (action === 'getFeeMonthly')         return handleGetFeeMonthly_(e);
+  if (action === 'getWorkAvailability')   return handleGetWorkAvailability_(e);
 
   // ── デフォルト: TODO シート ──
   Logger.log('[doGet] 取得シート: ' + SHEET_TODO + ' (デフォルト)');
@@ -199,6 +204,21 @@ function doPost(e) {
     // ── 行更新アクション ──
     if (data.action === 'updateRow') {
       return handleUpdateRow_(ss, data);
+    }
+
+    // ── 顧問料設定 一括保存 ──
+    if (data.action === 'saveFeeMaster') {
+      return handleSaveFeeMaster_(ss, data);
+    }
+
+    // ── 月別請求管理 一括保存 ──
+    if (data.action === 'saveFeeMonthly') {
+      return handleSaveFeeMonthly_(ss, data);
+    }
+
+    // ── 勤務予定保存 ──
+    if (data.action === 'saveWorkAvailability') {
+      return handleSaveWorkAvailability_(ss, data);
     }
 
     // ── 従来の新規追加処理 ──
@@ -931,6 +951,175 @@ function handleUpdateStressCheckRecord_(ss, data) {
   return jsonResponse_({ success: false, error: '該当ID(' + targetId + ')が見つかりません' });
 }
 
+// ===============================================================
+// 顧問料管理
+// ===============================================================
+
+// --------------- 月別請求管理 取得 ---------------
+// ?action=getFeeMonthly&month=YYYY/MM で対象月のみ / month省略で全件
+function handleGetFeeMonthly_(e) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_FEE_MONTHLY);
+  if (!sheet) {
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var month = (e && e.parameter && e.parameter.month) ? String(e.parameter.month).trim() : '';
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var headers = data[0];
+  var result  = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    if (!month || String(obj['対象月'] || '').trim() === month) {
+      result.push(obj);
+    }
+  }
+  Logger.log('[getFeeMonthly] month=' + (month || '全件') + ' 件数=' + result.length);
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// --------------- 顧問料設定 一括保存（client_id キー upsert） ---------------
+function handleSaveFeeMaster_(ss, data) {
+  var rows = data.rows;
+  if (!Array.isArray(rows)) {
+    return jsonResponse_({ success: false, error: 'rows が配列ではありません' });
+  }
+  var headers = ['client_id','会社名','担当者','月額顧問料','給与計算費','社会保険費',
+    '支払方法','源泉対象','消費税対象','備考','有効フラグ','作成日時','更新日時'];
+
+  var sheet = ss.getSheetByName(SHEET_FEE_MASTER);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_FEE_MASTER);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    Logger.log('[saveFeeMaster] シート新規作成');
+  }
+
+  var existingData = sheet.getDataRange().getValues();
+  var existHeaders = existingData[0];
+  var idCol      = existHeaders.indexOf('client_id');
+  var createdCol = existHeaders.indexOf('作成日時');
+  var createdMap = {};
+  for (var i = 1; i < existingData.length; i++) {
+    var cid = String(existingData[i][idCol] || '').trim();
+    if (cid) createdMap[cid] = existingData[i][createdCol] || '';
+  }
+
+  var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  var newRows = [];
+  rows.forEach(function(row) {
+    var cid = String(row['client_id'] || '').trim();
+    if (!cid) return;
+    newRows.push(headers.map(function(h) {
+      if (h === '更新日時') return nowJST;
+      if (h === '作成日時') return createdMap[cid] || nowJST;
+      return row[h] !== undefined ? row[h] : '';
+    }));
+  });
+
+  sheet.clearContents();
+  var allRows = [headers].concat(newRows);
+  sheet.getRange(1, 1, allRows.length, headers.length).setValues(allRows);
+  Logger.log('[saveFeeMaster] 保存完了: ' + newRows.length + '行');
+  return jsonResponse_({ success: true, savedCount: newRows.length });
+}
+
+// --------------- 月別請求管理 一括保存（対象月内を全置換、他月は保持） ---------------
+// GAS側でも税額を再計算して保存（JS側との不一致防止）
+// 源泉対象額 = 顧問料 + 給与計算費 + スポット請求 + 調整額（社会保険費は除外）
+function handleSaveFeeMonthly_(ss, data) {
+  var rows = data.rows;
+  if (!Array.isArray(rows)) {
+    return jsonResponse_({ success: false, error: 'rows が配列ではありません' });
+  }
+  var headers = ['対象月','client_id','会社名','担当者','顧問料','給与計算費','社会保険費',
+    'スポット請求','スポット内容','調整額','調整理由','小計','消費税','源泉所得税',
+    '入金予定額','源泉対象','消費税対象','支払方法','入金状況','入金日','メモ','作成日時','更新日時'];
+
+  var sheet = ss.getSheetByName(SHEET_FEE_MONTHLY);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_FEE_MONTHLY);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    Logger.log('[saveFeeMonthly] シート新規作成');
+  }
+
+  var targetMonths = {};
+  rows.forEach(function(r) {
+    var m = String(r['対象月'] || '').trim();
+    if (m) targetMonths[m] = true;
+  });
+
+  var existingData = sheet.getDataRange().getValues();
+  var existHeaders = existingData[0];
+  var monthColE   = existHeaders.indexOf('対象月');
+  var cidColE     = existHeaders.indexOf('client_id');
+  var createdColE = existHeaders.indexOf('作成日時');
+
+  var createdMap = {};
+  var remainRows = [];
+  for (var i = 1; i < existingData.length; i++) {
+    var rowM   = String(existingData[i][monthColE]  || '').trim();
+    var rowCid = String(existingData[i][cidColE] || '').trim();
+    var key    = rowM + '_' + rowCid;
+    createdMap[key] = existingData[i][createdColE] || '';
+    if (!targetMonths[rowM]) {
+      var obj = {};
+      for (var j = 0; j < existHeaders.length; j++) {
+        obj[existHeaders[j]] = existingData[i][j];
+      }
+      remainRows.push(headers.map(function(h) {
+        return obj[h] !== undefined ? obj[h] : '';
+      }));
+    }
+  }
+
+  var nowJST  = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  var newRows = [];
+  rows.forEach(function(row) {
+    var targetMonth = String(row['対象月'] || '').trim();
+    var cid         = String(row['client_id'] || '').trim();
+    if (!targetMonth) return;
+    var key = targetMonth + '_' + cid;
+
+    var fee     = parseFloat(row['顧問料'])      || 0;
+    var payroll = parseFloat(row['給与計算費'])  || 0;
+    var social  = parseFloat(row['社会保険費'])  || 0;
+    var spot    = parseFloat(row['スポット請求']) || 0;
+    var adjust  = parseFloat(row['調整額'])      || 0;
+
+    var subtotal = fee + payroll + social + spot + adjust;
+    var isTax    = String(row['消費税対象'] || '').toUpperCase() === 'TRUE';
+    var isWh     = String(row['源泉対象']   || '').toUpperCase() === 'TRUE';
+    var tax      = isTax ? Math.floor(subtotal * 0.1) : 0;
+    var whTarget = fee + payroll + spot + adjust;  // 社会保険費は源泉対象外
+    var wh       = isWh  ? Math.floor(whTarget * 0.1021) : 0;
+    var expected = subtotal + tax - wh;
+
+    newRows.push(headers.map(function(h) {
+      if (h === '更新日時')   return nowJST;
+      if (h === '作成日時')   return createdMap[key] || nowJST;
+      if (h === '小計')       return subtotal;
+      if (h === '消費税')     return tax;
+      if (h === '源泉所得税') return wh;
+      if (h === '入金予定額') return expected;
+      return row[h] !== undefined ? row[h] : '';
+    }));
+  });
+
+  var allRows = [headers].concat(remainRows).concat(newRows);
+  sheet.clearContents();
+  sheet.getRange(1, 1, allRows.length, headers.length).setValues(allRows);
+  Logger.log('[saveFeeMonthly] 保存完了: 新規/更新=' + newRows.length + '行, 保持=' + remainRows.length + '行');
+  return jsonResponse_({ success: true, savedCount: newRows.length });
+}
+
 // --------------- 担当者状態（一時保存） ---------------
 
 var VALID_MEMBER_STATUSES = ['normal', 'phone', 'toilet', 'smoke', 'clean', 'meal'];
@@ -1079,4 +1268,100 @@ function convertToMinutes_(val) {
   if (!isNaN(num)) return num;
 
   return '';
+}
+
+// ===============================================================
+// 勤務予定共有
+// ===============================================================
+
+function ensureWorkAvailabilitySheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_WORK_AVAIL);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_WORK_AVAIL);
+    sheet.appendRow(['id', 'staff_id', 'staff_name', 'date', 'status', 'start_time', 'end_time', 'memo', 'updated_at']);
+    Logger.log('[ensureWorkAvailabilitySheet_] シート「' + SHEET_WORK_AVAIL + '」を新規作成しました');
+  }
+  return sheet;
+}
+
+function handleGetWorkAvailability_(e) {
+  var sheet   = ensureWorkAvailabilitySheet_();
+  var staffId = (e && e.parameter && e.parameter.staff_id) ? e.parameter.staff_id : '';
+  var month   = (e && e.parameter && e.parameter.month)    ? e.parameter.month    : '';
+  Logger.log('[getWorkAvailability] staff_id=' + staffId + ' month=' + month);
+
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var result  = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var v = data[i][j];
+      if (v instanceof Date) v = Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+      obj[headers[j]] = v;
+    }
+    if (staffId && String(obj['staff_id']) !== staffId) continue;
+    if (month   && String(obj['date']).substring(0, 7) !== month) continue;
+    result.push(obj);
+  }
+  Logger.log('[getWorkAvailability] 件数=' + result.length);
+  return jsonResponse_(result);
+}
+
+function handleSaveWorkAvailability_(ss, data) {
+  var sheet     = ensureWorkAvailabilitySheet_();
+  var staffId   = String(data.staff_id   || '');
+  var staffName = String(data.staff_name || '');
+  var records   = data.records || [];
+  var nowJST    = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  var baseTs    = nowJST.replace(/[^0-9]/g, '');
+  Logger.log('[saveWorkAvailability] staff_id=' + staffId + ' 件数=' + records.length);
+
+  var allData    = sheet.getDataRange().getValues();
+  var headers    = allData[0];
+  var idCol      = headers.indexOf('id');
+  var dateCol    = headers.indexOf('date');
+  var staffIdCol = headers.indexOf('staff_id');
+
+  // 既存行を (staff_id + '_' + date) → シート行番号 でマップ化
+  var existMap = {};
+  for (var i = 1; i < allData.length; i++) {
+    var key = String(allData[i][staffIdCol]) + '_' + String(allData[i][dateCol]);
+    existMap[key] = i + 1;
+  }
+
+  var count = 0;
+  for (var k = 0; k < records.length; k++) {
+    var rec     = records[k];
+    var dateStr = String(rec.date || '');
+    if (!dateStr) continue;
+
+    var rowKey  = staffId + '_' + dateStr;
+    var rowData = [
+      '',                             // A: id
+      staffId,                        // B: staff_id
+      staffName,                      // C: staff_name
+      dateStr,                        // D: date
+      String(rec.status     || ''),   // E: status
+      String(rec.start_time || ''),   // F: start_time
+      String(rec.end_time   || ''),   // G: end_time
+      String(rec.memo       || ''),   // H: memo
+      nowJST                          // I: updated_at
+    ];
+
+    if (existMap[rowKey]) {
+      var rowNum  = existMap[rowKey];
+      rowData[idCol] = allData[rowNum - 1][idCol]; // id は変えない
+      sheet.getRange(rowNum, 1, 1, headers.length).setValues([rowData]);
+    } else {
+      rowData[idCol] = baseTs + ('0' + k).slice(-2);
+      sheet.appendRow(rowData);
+      existMap[rowKey] = sheet.getLastRow();
+    }
+    count++;
+  }
+
+  Logger.log('[saveWorkAvailability] 完了 count=' + count);
+  return jsonResponse_({ success: true, count: count });
 }

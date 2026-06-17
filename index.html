@@ -395,6 +395,33 @@
     .sc-star-btn.active { color: #f9a825; }
     .sc-star-btn:not(.active) { color: #ccc; }
 
+    /* ===== 顧問料管理 ===== */
+    .fee-subtab-bar { display:flex; gap:2px; margin-bottom:16px; border-bottom:2px solid var(--card-border,#e4ece4); }
+    .fee-subtab { padding:8px 20px; font-size:0.88rem; font-weight:600; cursor:pointer; border:none; background:none; color:#888; border-bottom:3px solid transparent; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; font-family:inherit; }
+    .fee-subtab.active { color:var(--accent,#4caf50); border-bottom-color:var(--accent,#4caf50); }
+    .fee-tbl { width:100%; border-collapse:collapse; font-size:0.82rem; }
+    .fee-tbl th { background:var(--table-header-bg,#f5f7f5); color:var(--table-header-text,#3a5040); font-weight:700; padding:7px 6px; border-bottom:2px solid var(--table-border,#dde5dd); white-space:nowrap; text-align:left; }
+    .fee-tbl td { padding:4px 4px; border-bottom:1px solid var(--table-border,#dde5dd); vertical-align:middle; }
+    .fee-tbl tr:hover td { background:var(--row-hover,#f5faf5); }
+    .fee-inp { width:100%; border:none; background:transparent; font-size:0.82rem; font-family:inherit; padding:2px 4px; box-sizing:border-box; }
+    .fee-inp:focus { background:#fff3e0; outline:1px solid var(--accent,#4caf50); border-radius:2px; }
+    .fee-inp-r { text-align:right; }
+    .fee-sel { width:100%; border:none; background:transparent; font-size:0.82rem; font-family:inherit; padding:2px 2px; }
+    .fee-calc { background:var(--table-header-bg,#f0f6f0) !important; color:#3a5040; font-weight:600; text-align:right; padding:4px 8px !important; white-space:nowrap; }
+    .fee-status-paid { color:#2e7d32; font-weight:600; }
+    .fee-status-unpaid { color:#c62828; }
+    .fee-annual-tbl { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    .fee-annual-tbl th { background:var(--table-header-bg,#f5f7f5); color:var(--table-header-text,#3a5040); font-weight:700; padding:8px 10px; border-bottom:2px solid var(--table-border,#dde5dd); text-align:right; white-space:nowrap; }
+    .fee-annual-tbl th:first-child { text-align:left; }
+    .fee-annual-tbl td { padding:7px 10px; border-bottom:1px solid var(--table-border,#dde5dd); text-align:right; }
+    .fee-annual-tbl td:first-child { text-align:left; font-weight:500; }
+    .fee-annual-tbl tr:hover td { background:var(--row-hover,#f5faf5); }
+    .fee-annual-tbl tfoot td { font-weight:700; background:var(--table-header-bg,#f5f7f5); border-top:2px solid var(--table-border,#dde5dd); }
+    .fee-top4-row { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--card-border,#e4ece4); }
+    .fee-top4-rank { font-size:1.3rem; width:36px; text-align:center; }
+    .fee-top4-name { flex:1; font-weight:600; }
+    .fee-top4-amt { font-size:1.05rem; font-weight:700; color:var(--accent,#4caf50); }
+
     /* ===== 記録追加 ===== */
     .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
@@ -702,6 +729,44 @@
       .cal-legend { gap: 8px; margin-bottom: 10px; }
       .cal-legend-item { font-size: 0.7rem; }
     }
+
+    /* ===== 勤務予定共有 ===== */
+    .wa-tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:2px solid var(--card-border);}
+    .wa-tab{padding:8px 20px;font-size:0.88rem;font-weight:600;cursor:pointer;border:none;background:none;color:#888;border-bottom:3px solid transparent;margin-bottom:-2px;transition:color 0.15s,border-color 0.15s;font-family:inherit;}
+    .wa-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+    .wa-input-tbl{width:100%;border-collapse:collapse;font-size:0.86rem;}
+    .wa-input-tbl th{background:var(--table-header-bg);color:var(--table-header-text);font-weight:600;padding:8px 10px;border-bottom:2px solid var(--table-border);white-space:nowrap;text-align:left;}
+    .wa-input-tbl td{padding:5px 6px;border-bottom:1px solid var(--table-border);vertical-align:middle;}
+    .wa-input-tbl tr:hover td{background:var(--row-hover);}
+    .wa-date-cell{font-weight:600;white-space:nowrap;min-width:64px;}
+    .wa-date-cell.sat{color:#1976d2;}
+    .wa-date-cell.sun{color:#c62828;}
+    .wa-status-sel{border:1px solid var(--input-border);border-radius:6px;padding:4px 6px;font-size:0.83rem;font-family:inherit;background:#fff;}
+    .wa-time-inp{border:1px solid var(--input-border);border-radius:6px;padding:4px 6px;font-size:0.83rem;width:82px;font-family:inherit;}
+    .wa-memo-inp{border:1px solid var(--input-border);border-radius:6px;padding:4px 8px;font-size:0.83rem;width:100%;font-family:inherit;min-width:160px;}
+    .wa-status-ok  {background:#e0f5ee;color:#1b7a5a;}
+    .wa-status-part{background:#fffde7;color:#8a6a00;}
+    .wa-status-off {background:#f0f0f0;color:#666;}
+    .wa-status-tbd {background:#f3e8f9;color:#7b4fa0;}
+    .wa-calendar{width:100%;}
+    .wa-cal-header{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;}
+    .wa-cal-header-cell{text-align:center;font-size:0.78rem;font-weight:700;color:var(--text-sub);padding:4px 0;}
+    .wa-cal-header-cell.sat{color:#1976d2;}
+    .wa-cal-header-cell.sun{color:#c62828;}
+    .wa-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+    .wa-cal-cell{min-height:78px;border-radius:8px;padding:6px 7px;font-size:0.78rem;border:1px solid var(--card-border);background:#fff;}
+    .wa-cal-cell.empty{background:transparent;border-color:transparent;}
+    .wa-cal-cell.wa-today{box-shadow:0 0 0 2px var(--accent);}
+    .wa-cal-day{font-weight:700;font-size:0.82rem;margin-bottom:2px;}
+    .wa-cal-day.sat{color:#1976d2;}
+    .wa-cal-day.sun{color:#c62828;}
+    .wa-cal-status{font-size:0.73rem;font-weight:600;padding:1px 6px;border-radius:10px;display:inline-block;margin-bottom:2px;}
+    .wa-cal-time{font-size:0.72rem;color:var(--text-sub);}
+    .wa-cal-memo{font-size:0.70rem;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .wa-cal-cell.status-ok  {background:#e8faf3;}
+    .wa-cal-cell.status-part{background:#fffde7;}
+    .wa-cal-cell.status-off {background:#f5f5f5;}
+    .wa-cal-cell.status-tbd {background:#f8f0fc;}
   </style>
 </head>
 <body>
@@ -775,6 +840,14 @@
     <div class="nav-item" onclick="showPage('stress-check', this)">
       <span class="nav-icon">🧠</span>
       <span class="nav-label">ストレスチェック</span>
+    </div>
+    <div class="nav-item" onclick="showPage('retainer', this)">
+      <span class="nav-icon">💰</span>
+      <span class="nav-label">顧問料管理</span>
+    </div>
+    <div class="nav-item" onclick="showPage('work-avail', this)">
+      <span class="nav-icon">🕒</span>
+      <span class="nav-label">勤務予定共有</span>
     </div>
   </nav>
 </aside>
@@ -905,6 +978,14 @@
             <div class="busy-season-body">今年の算定年更はこちら☆</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 本日の勤務予定（新規追加カード） -->
+    <div class="card" style="padding:12px 16px;max-width:360px;margin-bottom:8px;">
+      <div class="section-title" style="font-size:0.78rem;margin-bottom:6px;cursor:pointer;" onclick="showPageByName('work-avail')">🕒 本日の勤務予定 <span style="font-size:0.7rem;color:var(--text-muted);font-weight:400;">（タップで編集）</span></div>
+      <div id="work-avail-today-content" style="font-size:0.83rem;color:var(--text);">
+        <span style="color:#bbb;font-size:0.78rem;">読み込み中…</span>
       </div>
     </div>
   </div>
@@ -1967,6 +2048,209 @@
     </div>
   </div>
 
+  <!-- 顧問料管理 -->
+  <div class="page" id="page-retainer">
+    <div class="page-header">
+      <h1>顧問料管理</h1>
+      <p>顧問料設定・月別請求一覧・年次集計を管理します</p>
+    </div>
+
+    <!-- サブタブ -->
+    <div class="fee-subtab-bar">
+      <button class="fee-subtab active" onclick="showFeeSubtab('master', this)">顧問料設定</button>
+      <button class="fee-subtab" onclick="showFeeSubtab('monthly', this)">月別請求一覧</button>
+      <button class="fee-subtab" onclick="showFeeSubtab('annual', this)">年次集計</button>
+    </div>
+
+    <!-- ① 顧問料設定 -->
+    <div id="fee-sub-master">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="loadClientsIntoFeeMaster()">契約クライアント読込</button>
+          <button class="btn btn-primary" style="font-size:0.88rem;" onclick="saveFeeMaster()">保存</button>
+          <span id="fee-master-msg" style="display:none;font-size:0.82rem;color:#2e7d32;font-weight:600;">保存しました</span>
+          <span id="fee-master-err" style="display:none;font-size:0.82rem;color:#c62828;font-weight:600;"></span>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:auto;">
+        <table class="fee-tbl">
+          <thead>
+            <tr>
+              <th style="min-width:150px;">会社名</th>
+              <th style="min-width:80px;">担当者</th>
+              <th style="min-width:90px;text-align:right;">月額顧問料</th>
+              <th style="min-width:90px;text-align:right;">給与計算費</th>
+              <th style="min-width:90px;text-align:right;">社会保険費</th>
+              <th style="min-width:100px;">支払方法</th>
+              <th style="min-width:56px;text-align:center;">源泉</th>
+              <th style="min-width:56px;text-align:center;">消費税</th>
+              <th style="min-width:160px;">備考</th>
+              <th style="min-width:48px;text-align:center;">有効</th>
+            </tr>
+          </thead>
+          <tbody id="fee-master-tbody"></tbody>
+        </table>
+        <div id="fee-master-empty" style="display:none;text-align:center;color:#9e9e9e;padding:32px;font-size:0.88rem;">
+          「契約クライアント読込」でクライアント一覧から設定を読み込んでください
+        </div>
+      </div>
+    </div>
+
+    <!-- ② 月別請求一覧 -->
+    <div id="fee-sub-monthly" style="display:none;">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="font-size:0.88rem;font-weight:600;color:#3a5040;">対象月</label>
+          <input type="month" id="fee-monthly-month" class="form-input" style="width:148px;" onchange="fetchFeeMonthly()" />
+          <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="document.getElementById('fee-csv-input').click()">CSV読込（初回）</button>
+          <input type="file" id="fee-csv-input" accept=".csv" style="display:none;" onchange="importFeeCSV(this)" />
+          <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="copyFromPrevMonth()">前月コピー</button>
+          <button class="btn btn-primary" id="fee-monthly-save-btn" style="font-size:0.88rem;" onclick="saveFeeMonthly()">保存</button>
+          <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="downloadFeeMonthlyCSV()">CSV出力</button>
+          <span id="fee-monthly-msg" style="display:none;font-size:0.82rem;color:#2e7d32;font-weight:600;">保存しました</span>
+          <span id="fee-monthly-err" style="display:none;font-size:0.82rem;color:#c62828;font-weight:600;"></span>
+        </div>
+        <div id="fee-monthly-summary" style="display:none;gap:24px;flex-wrap:wrap;font-size:0.85rem;font-weight:600;color:#3a5040;margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border,#e4ece4);"></div>
+      </div>
+      <div class="card" style="padding:0;overflow:auto;">
+        <table class="fee-tbl">
+          <thead>
+            <tr>
+              <th style="min-width:140px;">会社名</th>
+              <th style="min-width:70px;">担当者</th>
+              <th style="min-width:86px;text-align:right;">顧問料</th>
+              <th style="min-width:86px;text-align:right;">給与計算費</th>
+              <th style="min-width:86px;text-align:right;">社会保険費</th>
+              <th style="min-width:80px;text-align:right;">スポット</th>
+              <th style="min-width:80px;text-align:right;">調整額</th>
+              <th style="min-width:80px;" class="fee-calc">小計</th>
+              <th style="min-width:72px;" class="fee-calc">消費税</th>
+              <th style="min-width:88px;" class="fee-calc">源泉所得税</th>
+              <th style="min-width:96px;" class="fee-calc">入金予定額</th>
+              <th style="min-width:96px;">支払方法</th>
+              <th style="min-width:80px;">入金状況</th>
+              <th style="min-width:106px;">入金日</th>
+              <th style="min-width:150px;">スポット内容/メモ</th>
+            </tr>
+          </thead>
+          <tbody id="fee-monthly-tbody"></tbody>
+        </table>
+        <div id="fee-monthly-empty" style="text-align:center;color:#9e9e9e;padding:32px;font-size:0.88rem;">
+          対象月を選択して「前月コピー」または「CSV読込」で行を追加してください
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ 年次集計 -->
+    <div id="fee-sub-annual" style="display:none;">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="font-size:0.88rem;font-weight:600;color:#3a5040;">対象年</label>
+          <select id="fee-annual-year" class="form-select" style="width:100px;" onchange="renderFeeAnnual()"></select>
+          <button class="btn btn-secondary" style="font-size:0.88rem;" onclick="downloadFeeAnnualCSV()">CSV出力</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="font-weight:700;font-size:0.9rem;color:#3a5040;margin-bottom:10px;">月次サマリー</div>
+        <div style="overflow:auto;">
+          <table class="fee-annual-tbl">
+            <thead>
+              <tr>
+                <th style="text-align:left;min-width:68px;">月</th>
+                <th style="min-width:44px;">件数</th>
+                <th style="min-width:84px;">顧問料計</th>
+                <th style="min-width:84px;">給与計算費計</th>
+                <th style="min-width:72px;">スポット計</th>
+                <th style="min-width:84px;">小計</th>
+                <th style="min-width:72px;">消費税</th>
+                <th style="min-width:80px;">源泉所得税</th>
+                <th style="min-width:96px;">入金予定額計</th>
+              </tr>
+            </thead>
+            <tbody id="fee-annual-monthly-tbody"></tbody>
+            <tfoot id="fee-annual-monthly-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;font-size:0.9rem;color:#3a5040;margin-bottom:4px;">上位4社集計（確定申告参考）</div>
+        <div style="font-size:0.78rem;color:#888;margin-bottom:10px;">年間入金予定額の上位4社</div>
+        <div id="fee-top4-list"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 勤務予定共有 -->
+  <div class="page" id="page-work-avail">
+    <div class="page-header">
+      <h1>🕒 勤務予定共有</h1>
+      <p>勤務できそうな時間を入力・共有できます</p>
+    </div>
+    <div class="card">
+      <div class="wa-tab-bar">
+        <button class="wa-tab active" onclick="switchWorkAvailTab('input', this)">📝 勤務予定入力</button>
+        <button class="wa-tab" onclick="switchWorkAvailTab('calendar', this)">📅 カレンダーで確認</button>
+      </div>
+
+      <!-- 入力パネル -->
+      <div id="wa-panel-input">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <label style="font-size:0.82rem;font-weight:600;color:var(--text-sub);">スタッフ：</label>
+          <select id="wa-staff-sel" class="form-select" style="width:100px;padding:6px 10px;font-size:0.83rem;" onchange="loadAndRenderWaInput()">
+            <option value="hamada">濱田</option>
+            <option value="takasaki">髙嵜</option>
+          </select>
+          <button onclick="changeWorkAvailMonth(-1)" class="btn btn-secondary" style="padding:5px 12px;font-size:0.9rem;">◀</button>
+          <span id="wa-input-month-label" style="font-size:1rem;font-weight:600;min-width:80px;text-align:center;"></span>
+          <button onclick="changeWorkAvailMonth(1)" class="btn btn-secondary" style="padding:5px 12px;font-size:0.9rem;">▶</button>
+          <button onclick="saveWorkAvailability()" class="btn btn-primary" style="padding:7px 20px;margin-left:auto;">保存</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="wa-input-tbl">
+            <thead>
+              <tr>
+                <th style="min-width:72px;">日付</th>
+                <th style="min-width:104px;">勤務可否</th>
+                <th style="min-width:90px;">開始時刻</th>
+                <th style="min-width:90px;">終了時刻</th>
+                <th>メモ</th>
+              </tr>
+            </thead>
+            <tbody id="wa-input-tbody"></tbody>
+          </table>
+        </div>
+        <div id="wa-input-msg" style="margin-top:10px;font-size:0.83rem;color:var(--text-sub);text-align:right;"></div>
+      </div>
+
+      <!-- カレンダーパネル -->
+      <div id="wa-panel-calendar" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <label style="font-size:0.82rem;font-weight:600;color:var(--text-sub);">スタッフ：</label>
+          <select id="wa-cal-staff-sel" class="form-select" style="width:100px;padding:6px 10px;font-size:0.83rem;" onchange="loadAndRenderWaCalendar()">
+            <option value="hamada">濱田</option>
+            <option value="takasaki">髙嵜</option>
+          </select>
+          <button onclick="changeWorkAvailCalMonth(-1)" class="btn btn-secondary" style="padding:5px 12px;font-size:0.9rem;">◀</button>
+          <span id="wa-cal-month-label" style="font-size:1rem;font-weight:600;min-width:80px;text-align:center;"></span>
+          <button onclick="changeWorkAvailCalMonth(1)" class="btn btn-secondary" style="padding:5px 12px;font-size:0.9rem;">▶</button>
+        </div>
+        <div class="wa-calendar">
+          <div class="wa-cal-header">
+            <div class="wa-cal-header-cell sun">日</div>
+            <div class="wa-cal-header-cell">月</div>
+            <div class="wa-cal-header-cell">火</div>
+            <div class="wa-cal-header-cell">水</div>
+            <div class="wa-cal-header-cell">木</div>
+            <div class="wa-cal-header-cell">金</div>
+            <div class="wa-cal-header-cell sat">土</div>
+          </div>
+          <div class="wa-cal-grid" id="wa-calendar-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -2031,7 +2315,9 @@
     if (name === 'calendar')       initCalendarPage();
     if (name === 'busy-season')    initBusySeasonPage();
     if (name === 'stress-check')   { try { initStressCheckPage(); } catch(e) { console.error('[stress-check] 初期化エラー:', e); } }
+    if (name === 'retainer')       { try { initRetainerPage(); } catch(e) { console.error('[retainer] 初期化エラー:', e); } }
     if (name === 'dashboard')      { refreshFromSheet(); renderActivityList(); }
+    if (name === 'work-avail')     initWorkAvailabilityPage();
   }
 
   // モバイルメニュー開閉
@@ -6936,6 +7222,704 @@
     fetchStressCheckRecords();
   }
 
+  // ===== 顧問料管理 =====
+  var _feeMasterRows       = [];
+  var _feeMonthlyRows      = [];
+  var _feeAllMonthlyCache  = null;
+
+  // サブタブ切り替え
+  function showFeeSubtab(name, el) {
+    document.querySelectorAll('.fee-subtab').forEach(function(b) { b.classList.remove('active'); });
+    el.classList.add('active');
+    ['master','monthly','annual'].forEach(function(n) {
+      var p = document.getElementById('fee-sub-' + n);
+      if (p) p.style.display = (n === name) ? '' : 'none';
+    });
+    if (name === 'master'  && _feeMasterRows.length === 0) fetchFeeMaster();
+    if (name === 'monthly') { feeInitMonthInput(); fetchFeeMonthly(); }
+    if (name === 'annual')  initFeeAnnual();
+  }
+
+  // ページ初期化（navクリック時に呼ばれる）
+  function initRetainerPage() {
+    feeInitMonthInput();
+    fetchFeeMaster();
+  }
+
+  // ---------- 顧問料設定タブ ----------
+
+  function fetchFeeMaster() {
+    fetch(GAS_URL + '?sheet=' + encodeURIComponent('顧問料設定'))
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        _feeMasterRows = Array.isArray(rows) ? rows : [];
+        renderFeeMasterTable(_feeMasterRows);
+      })
+      .catch(function(e) { console.error('[fetchFeeMaster]', e); renderFeeMasterTable([]); });
+  }
+
+  function renderFeeMasterTable(rows) {
+    var tbody = document.getElementById('fee-master-tbody');
+    var empty = document.getElementById('fee-master-empty');
+    if (!tbody) return;
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    tbody.innerHTML = rows.map(function(r) {
+      var active = String(r['有効フラグ'] || 'TRUE').toUpperCase() !== 'FALSE';
+      var wh     = String(r['源泉対象']   || 'TRUE').toUpperCase() !== 'FALSE';
+      var tax    = String(r['消費税対象'] || 'TRUE').toUpperCase() !== 'FALSE';
+      return '<tr>' +
+        '<td>' + feeEsc_(r['会社名']) +
+          '<input type="hidden" class="fm-id"   value="' + feeEsc_(r['client_id']) + '">' +
+          '<input type="hidden" class="fm-name" value="' + feeEsc_(r['会社名']) + '">' +
+        '</td>' +
+        '<td><input class="fee-inp fm-tanto"   value="' + feeEsc_(r['担当者']) + '"></td>' +
+        '<td><input class="fee-inp fee-inp-r fm-fee"     type="number" min="0" value="' + feeN_(r['月額顧問料']) + '"></td>' +
+        '<td><input class="fee-inp fee-inp-r fm-payroll" type="number" min="0" value="' + feeN_(r['給与計算費']) + '"></td>' +
+        '<td><input class="fee-inp fee-inp-r fm-social"  type="number" min="0" value="' + feeN_(r['社会保険費']) + '"></td>' +
+        '<td><select class="fee-sel fm-payment">' + feePayOpts_(r['支払方法']) + '</select></td>' +
+        '<td style="text-align:center;"><input type="checkbox" class="fm-wh"     ' + (wh     ? 'checked' : '') + '></td>' +
+        '<td style="text-align:center;"><input type="checkbox" class="fm-tax"    ' + (tax    ? 'checked' : '') + '></td>' +
+        '<td><input class="fee-inp fm-memo" value="' + feeEsc_(r['備考']) + '" style="min-width:130px;"></td>' +
+        '<td style="text-align:center;"><input type="checkbox" class="fm-active" ' + (active ? 'checked' : '') + '></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function loadClientsIntoFeeMaster() {
+    fetch(GAS_URL + '?sheet=' + encodeURIComponent('クライアント'))
+      .then(function(r) { return r.json(); })
+      .then(function(clients) {
+        if (!Array.isArray(clients)) return;
+        var active = clients.filter(function(c) {
+          var s = String(c['ステータス'] || '').trim();
+          return s === '契約中' || s === 'active';
+        });
+        var existMap = {};
+        _feeMasterRows.forEach(function(r) { existMap[String(r['client_id'] || '')] = r; });
+        var merged = active.map(function(c) {
+          var cid = String(c['client_id'] || '');
+          var ex  = existMap[cid] || {};
+          return {
+            'client_id':   cid,
+            '会社名':      c['会社名'] || '',
+            '担当者':      ex['担当者']  || c['担当者']  || '',
+            '月額顧問料':  ex['月額顧問料']  || 0,
+            '給与計算費':  ex['給与計算費']  || 0,
+            '社会保険費':  ex['社会保険費']  || 0,
+            '支払方法':    ex['支払方法']   || '口座振替',
+            '源泉対象':    ex['源泉対象']   !== undefined ? ex['源泉対象']   : 'TRUE',
+            '消費税対象':  ex['消費税対象'] !== undefined ? ex['消費税対象'] : 'TRUE',
+            '備考':        ex['備考']       || '',
+            '有効フラグ':  'TRUE'
+          };
+        });
+        _feeMasterRows = merged;
+        renderFeeMasterTable(merged);
+      })
+      .catch(function(e) { console.error('[loadClientsIntoFeeMaster]', e); });
+  }
+
+  function saveFeeMaster() {
+    var tbody = document.getElementById('fee-master-tbody');
+    if (!tbody) return;
+    var rows = [];
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+      var cidEl  = tr.querySelector('.fm-id');
+      var nameEl = tr.querySelector('.fm-name');
+      if (!cidEl || !nameEl) return;
+      rows.push({
+        'client_id':   cidEl.value,
+        '会社名':      nameEl.value,
+        '担当者':      feeVal_(tr, '.fm-tanto'),
+        '月額顧問料':  feeN_(feeVal_(tr, '.fm-fee')),
+        '給与計算費':  feeN_(feeVal_(tr, '.fm-payroll')),
+        '社会保険費':  feeN_(feeVal_(tr, '.fm-social')),
+        '支払方法':    feeVal_(tr, '.fm-payment'),
+        '源泉対象':    feeChk_(tr, '.fm-wh'),
+        '消費税対象':  feeChk_(tr, '.fm-tax'),
+        '備考':        feeVal_(tr, '.fm-memo'),
+        '有効フラグ':  feeChk_(tr, '.fm-active')
+      });
+    });
+    if (rows.length === 0) return;
+    fetch(GAS_URL, { method:'POST', body: JSON.stringify({ action:'saveFeeMaster', rows:rows }) })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success) { feeMsg_('fee-master-msg'); fetchFeeMaster(); }
+        else feeErr_('fee-master-err', res.error || '保存に失敗しました');
+      })
+      .catch(function(e) { feeErr_('fee-master-err', e.message || String(e)); });
+  }
+
+  // ---------- 月別請求一覧タブ ----------
+
+  function feeInitMonthInput() {
+    var inp = document.getElementById('fee-monthly-month');
+    if (!inp || inp.value) return;
+    var now = new Date();
+    inp.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  }
+
+  function fetchFeeMonthly() {
+    var inp = document.getElementById('fee-monthly-month');
+    if (!inp || !inp.value) return;
+    var month = inp.value.replace('-', '/');
+    fetch(GAS_URL + '?action=getFeeMonthly&month=' + encodeURIComponent(month))
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        _feeMonthlyRows = Array.isArray(rows) ? rows : [];
+        renderFeeMonthlyTable(_feeMonthlyRows);
+      })
+      .catch(function(e) { console.error('[fetchFeeMonthly]', e); renderFeeMonthlyTable([]); });
+  }
+
+  function renderFeeMonthlyTable(rows) {
+    var tbody  = document.getElementById('fee-monthly-tbody');
+    var empty  = document.getElementById('fee-monthly-empty');
+    var sumEl  = document.getElementById('fee-monthly-summary');
+    if (!tbody) return;
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '';
+      if (empty)  empty.style.display  = '';
+      if (sumEl)  sumEl.style.display  = 'none';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    tbody.innerHTML = rows.map(function(r) {
+      var taxable  = String(r['消費税対象'] || 'TRUE').toUpperCase() !== 'FALSE';
+      var withhold = String(r['源泉対象']   || 'TRUE').toUpperCase() !== 'FALSE';
+      var fee     = feeN_(r['顧問料']);
+      var payroll = feeN_(r['給与計算費']);
+      var social  = feeN_(r['社会保険費']);
+      var spot    = feeN_(r['スポット請求']);
+      var adjust  = feeN_(r['調整額']);
+      var calc    = feeCalc_(fee, payroll, social, spot, adjust, taxable, withhold);
+      var stCls   = r['入金状況'] === '入金済' ? 'fee-status-paid' : (r['入金状況'] === '未入金' ? 'fee-status-unpaid' : '');
+      var dateVal = feeDateInp_(r['入金日']);
+      var memo    = feeEsc_(String(r['スポット内容'] || '') + (r['メモ'] ? (r['スポット内容'] ? ' / ' : '') + r['メモ'] : ''));
+      return '<tr data-taxable="' + taxable + '" data-withholding="' + withhold + '">' +
+        '<td>' + feeEsc_(r['会社名']) +
+          '<input type="hidden" class="fmo-id"   value="' + feeEsc_(r['client_id']) + '">' +
+          '<input type="hidden" class="fmo-name" value="' + feeEsc_(r['会社名']) + '">' +
+          '<input type="hidden" class="fmo-tanto" value="' + feeEsc_(r['担当者']) + '">' +
+          '<input type="hidden" class="fmo-taxable" value="' + (taxable ? 'TRUE' : 'FALSE') + '">' +
+          '<input type="hidden" class="fmo-wh-flag" value="' + (withhold ? 'TRUE' : 'FALSE') + '">' +
+          '<input type="hidden" class="fmo-spot-desc" value="' + feeEsc_(r['スポット内容']) + '">' +
+          '<input type="hidden" class="fmo-adj-reason" value="' + feeEsc_(r['調整理由']) + '">' +
+        '</td>' +
+        '<td style="font-size:0.78rem;color:#666;">' + feeEsc_(r['担当者']) + '</td>' +
+        '<td><input class="fee-inp fee-inp-r fmo-fee"     type="number" value="' + fee     + '" oninput="recalcFeeRow(this.closest(\'tr\'))"></td>' +
+        '<td><input class="fee-inp fee-inp-r fmo-payroll" type="number" value="' + payroll + '" oninput="recalcFeeRow(this.closest(\'tr\'))"></td>' +
+        '<td><input class="fee-inp fee-inp-r fmo-social"  type="number" value="' + social  + '" oninput="recalcFeeRow(this.closest(\'tr\'))"></td>' +
+        '<td><input class="fee-inp fee-inp-r fmo-spot"    type="number" value="' + spot    + '" oninput="recalcFeeRow(this.closest(\'tr\'))"></td>' +
+        '<td><input class="fee-inp fee-inp-r fmo-adjust"  type="number" value="' + adjust  + '" oninput="recalcFeeRow(this.closest(\'tr\'))"></td>' +
+        '<td class="fee-calc fmo-subtotal">' + feeFmt_(calc.subtotal) + '</td>' +
+        '<td class="fee-calc fmo-tax">'      + feeFmt_(calc.tax)      + '</td>' +
+        '<td class="fee-calc fmo-whtax">'    + feeFmt_(calc.wh)       + '</td>' +
+        '<td class="fee-calc fmo-expected">' + feeFmt_(calc.expected) + '</td>' +
+        '<td><select class="fee-sel fmo-payment">' + feePayOpts_(r['支払方法']) + '</select></td>' +
+        '<td><select class="fee-sel fmo-status ' + stCls + '" onchange="feeUpdateStatusStyle(this)">' + feeStatusOpts_(r['入金状況']) + '</select></td>' +
+        '<td><input class="fee-inp fmo-date" type="date" value="' + dateVal + '" style="min-width:110px;"></td>' +
+        '<td><input class="fee-inp fmo-memo" value="' + memo + '" style="min-width:130px;"></td>' +
+        '</tr>';
+    }).join('');
+
+    feeUpdateMonthSummary();
+  }
+
+  // 1行分の再計算（金額入力のたびに呼ばれる）
+  function recalcFeeRow(tr) {
+    if (!tr) return;
+    var fee     = feeN_(feeInpVal_(tr, '.fmo-fee'));
+    var payroll = feeN_(feeInpVal_(tr, '.fmo-payroll'));
+    var social  = feeN_(feeInpVal_(tr, '.fmo-social'));
+    var spot    = feeN_(feeInpVal_(tr, '.fmo-spot'));
+    var adjust  = feeN_(feeInpVal_(tr, '.fmo-adjust'));
+    var taxable  = tr.dataset.taxable    === 'true';
+    var withhold = tr.dataset.withholding === 'true';
+    var calc = feeCalc_(fee, payroll, social, spot, adjust, taxable, withhold);
+    feeTdSet_(tr, '.fmo-subtotal', calc.subtotal);
+    feeTdSet_(tr, '.fmo-tax',      calc.tax);
+    feeTdSet_(tr, '.fmo-whtax',    calc.wh);
+    feeTdSet_(tr, '.fmo-expected', calc.expected);
+    feeUpdateMonthSummary();
+  }
+
+  // 計算コア：Math.floor、源泉対象額は社会保険費を除く
+  function feeCalc_(fee, payroll, social, spot, adjust, taxable, withhold) {
+    var subtotal  = fee + payroll + social + spot + adjust;
+    var tax       = taxable  ? Math.floor(subtotal * 0.1)             : 0;
+    var whTarget  = fee + payroll + spot + adjust;
+    var wh        = withhold ? Math.floor(whTarget * 0.1021)          : 0;
+    var expected  = subtotal + tax - wh;
+    return { subtotal: subtotal, tax: tax, wh: wh, expected: expected };
+  }
+
+  // 月別合計バーを更新
+  function feeUpdateMonthSummary() {
+    var tbody = document.getElementById('fee-monthly-tbody');
+    var sumEl = document.getElementById('fee-monthly-summary');
+    if (!tbody || !sumEl) return;
+    var rows = tbody.querySelectorAll('tr');
+    if (rows.length === 0) { sumEl.style.display = 'none'; return; }
+    var tSub = 0, tTax = 0, tWh = 0, tExp = 0;
+    rows.forEach(function(tr) {
+      tSub += feeTdNum_(tr, '.fmo-subtotal');
+      tTax += feeTdNum_(tr, '.fmo-tax');
+      tWh  += feeTdNum_(tr, '.fmo-whtax');
+      tExp += feeTdNum_(tr, '.fmo-expected');
+    });
+    sumEl.style.display = 'flex';
+    sumEl.innerHTML =
+      '小計合計：<b>' + feeFmt_(tSub) + '円</b>' +
+      '　消費税：<b>' + feeFmt_(tTax) + '円</b>' +
+      '　源泉所得税：<b>' + feeFmt_(tWh) + '円</b>' +
+      '　入金予定額合計：<b style="color:var(--accent,#4caf50);font-size:1.05em;">' + feeFmt_(tExp) + '円</b>';
+  }
+
+  function feeUpdateStatusStyle(sel) {
+    sel.className = 'fee-sel fmo-status';
+    if (sel.value === '入金済') sel.classList.add('fee-status-paid');
+    if (sel.value === '未入金') sel.classList.add('fee-status-unpaid');
+  }
+
+  // 前月コピー
+  function copyFromPrevMonth() {
+    var inp = document.getElementById('fee-monthly-month');
+    if (!inp || !inp.value) { alert('対象月を選択してください'); return; }
+    var parts = inp.value.split('-');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10) - 1;
+    if (m < 1) { m = 12; y -= 1; }
+    var prevMonth = y + '/' + String(m).padStart(2, '0');
+    var newMonth  = parts[0] + '/' + parts[1];
+
+    fetch(GAS_URL + '?action=getFeeMonthly&month=' + encodeURIComponent(prevMonth))
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || rows.length === 0) {
+          alert('前月（' + prevMonth + '）のデータが見つかりません');
+          return;
+        }
+        var copied = rows.map(function(r) {
+          var fee     = feeN_(r['顧問料']);
+          var payroll = feeN_(r['給与計算費']);
+          var social  = feeN_(r['社会保険費']);
+          var spot    = feeN_(r['スポット請求']);
+          var adjust  = feeN_(r['調整額']);
+          var taxable  = String(r['消費税対象'] || 'TRUE').toUpperCase() !== 'FALSE';
+          var withhold = String(r['源泉対象']   || 'TRUE').toUpperCase() !== 'FALSE';
+          var calc = feeCalc_(fee, payroll, social, spot, adjust, taxable, withhold);
+          return {
+            '対象月':     newMonth,
+            'client_id':  r['client_id'] || '',
+            '会社名':     r['会社名']    || '',
+            '担当者':     r['担当者']    || '',
+            '顧問料':     fee,
+            '給与計算費': payroll,
+            '社会保険費': social,
+            'スポット請求': spot,
+            'スポット内容': r['スポット内容'] || '',
+            '調整額':     adjust,
+            '調整理由':   r['調整理由'] || '',
+            '小計':       calc.subtotal,
+            '消費税':     calc.tax,
+            '源泉所得税': calc.wh,
+            '入金予定額': calc.expected,
+            '源泉対象':   withhold ? 'TRUE' : 'FALSE',
+            '消費税対象': taxable  ? 'TRUE' : 'FALSE',
+            '支払方法':   r['支払方法'] || '口座振替',
+            '入金状況':   '未入金',
+            '入金日':     '',
+            'メモ':       r['メモ'] || ''
+          };
+        });
+        _feeMonthlyRows = copied;
+        renderFeeMonthlyTable(copied);
+      })
+      .catch(function(e) { alert('前月データ取得に失敗しました: ' + (e.message || String(e))); });
+  }
+
+  // CSV読込（初回）
+  function importFeeCSV(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var inp = document.getElementById('fee-monthly-month');
+    var targetMonth = inp && inp.value ? inp.value.replace('-', '/') : '';
+    if (!targetMonth) { alert('先に対象月を選択してください'); input.value = ''; return; }
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var rows = feeParseCsv_(ev.target.result, targetMonth);
+      if (!rows || rows.length === 0) {
+        alert('読み込めるデータがありませんでした。列名を確認してください。');
+        input.value = '';
+        return;
+      }
+      _feeMonthlyRows = rows;
+      renderFeeMonthlyTable(rows);
+      input.value = '';
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  // CSV解析（柔軟な列名マッピング対応）
+  function feeParseCsv_(text, targetMonth) {
+    var lines = text.split(/\r?\n/).filter(function(l) { return l.trim(); });
+    if (lines.length < 2) return [];
+    var headers = feeCsvLine_(lines[0]);
+
+    // 列名エイリアスマップ
+    var ALIASES = {
+      '会社名':     ['会社名','顧問先','クライアント名','顧問先名'],
+      '担当者':     ['担当者'],
+      '顧問料':     ['顧問料','月額顧問料','基本顧問料'],
+      '給与計算費': ['給与計算費','給与計算','給計費'],
+      '社会保険費': ['社会保険費','社保費','社会保険'],
+      'スポット請求':['スポット請求','スポット','スポット金額'],
+      '調整額':     ['調整額','調整'],
+      '支払方法':   ['支払方法','支払'],
+      '入金予定額': ['入金予定額','振替金額','請求金額','入金額'],
+      'メモ':       ['メモ','備考','摘要']
+    };
+    var colIdx = {};
+    Object.keys(ALIASES).forEach(function(key) {
+      ALIASES[key].forEach(function(alias) {
+        var idx = headers.indexOf(alias);
+        if (idx !== -1 && colIdx[key] === undefined) colIdx[key] = idx;
+      });
+    });
+
+    var rows = [];
+    for (var i = 1; i < lines.length; i++) {
+      var cells = feeCsvLine_(lines[i]);
+      var name  = colIdx['会社名'] !== undefined ? cells[colIdx['会社名']] : '';
+      if (!name) continue;
+      var fee     = colIdx['顧問料']     !== undefined ? feeN_(cells[colIdx['顧問料']])     : 0;
+      var payroll = colIdx['給与計算費'] !== undefined ? feeN_(cells[colIdx['給与計算費']]) : 0;
+      var social  = colIdx['社会保険費'] !== undefined ? feeN_(cells[colIdx['社会保険費']]) : 0;
+      var spot    = colIdx['スポット請求'] !== undefined ? feeN_(cells[colIdx['スポット請求']]) : 0;
+      var adjust  = colIdx['調整額']     !== undefined ? feeN_(cells[colIdx['調整額']])     : 0;
+      var hasBreakdown = fee > 0 || payroll > 0 || social > 0;
+      var importedExpected = colIdx['入金予定額'] !== undefined ? feeN_(cells[colIdx['入金予定額']]) : 0;
+      var memo = colIdx['メモ'] !== undefined ? (cells[colIdx['メモ']] || '') : '';
+      var calc = feeCalc_(fee, payroll, social, spot, adjust, true, true);
+      // 内訳がなく入金予定額のみある場合はメモに記録
+      if (!hasBreakdown && importedExpected > 0) {
+        memo = (memo ? memo + ' ' : '') + '(CSV入金予定額: ' + feeFmt_(importedExpected) + '円 ※内訳手入力要)';
+      }
+      rows.push({
+        '対象月':     targetMonth,
+        'client_id':  '',
+        '会社名':     name,
+        '担当者':     colIdx['担当者'] !== undefined ? (cells[colIdx['担当者']] || '') : '',
+        '顧問料':     fee, '給与計算費': payroll, '社会保険費': social,
+        'スポット請求': spot, 'スポット内容': '', '調整額': adjust, '調整理由': '',
+        '小計':       hasBreakdown ? calc.subtotal : 0,
+        '消費税':     hasBreakdown ? calc.tax      : 0,
+        '源泉所得税': hasBreakdown ? calc.wh       : 0,
+        '入金予定額': hasBreakdown ? calc.expected : importedExpected,
+        '源泉対象':   'TRUE', '消費税対象': 'TRUE',
+        '支払方法':   colIdx['支払方法'] !== undefined ? (cells[colIdx['支払方法']] || '口座振替') : '口座振替',
+        '入金状況':   '未入金', '入金日': '', 'メモ': memo
+      });
+    }
+    return rows;
+  }
+
+  // 月別請求保存
+  function saveFeeMonthly() {
+    var inp = document.getElementById('fee-monthly-month');
+    if (!inp || !inp.value) { alert('対象月を選択してください'); return; }
+    var targetMonth = inp.value.replace('-', '/');
+    var tbody = document.getElementById('fee-monthly-tbody');
+    if (!tbody) return;
+    var rows = [];
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+      rows.push({
+        '対象月':     targetMonth,
+        'client_id':  feeVal_(tr, '.fmo-id'),
+        '会社名':     feeVal_(tr, '.fmo-name'),
+        '担当者':     feeVal_(tr, '.fmo-tanto'),
+        '顧問料':     feeN_(feeInpVal_(tr, '.fmo-fee')),
+        '給与計算費': feeN_(feeInpVal_(tr, '.fmo-payroll')),
+        '社会保険費': feeN_(feeInpVal_(tr, '.fmo-social')),
+        'スポット請求': feeN_(feeInpVal_(tr, '.fmo-spot')),
+        'スポット内容': feeVal_(tr, '.fmo-spot-desc'),
+        '調整額':     feeN_(feeInpVal_(tr, '.fmo-adjust')),
+        '調整理由':   feeVal_(tr, '.fmo-adj-reason'),
+        '小計':       feeTdNum_(tr, '.fmo-subtotal'),
+        '消費税':     feeTdNum_(tr, '.fmo-tax'),
+        '源泉所得税': feeTdNum_(tr, '.fmo-whtax'),
+        '入金予定額': feeTdNum_(tr, '.fmo-expected'),
+        '源泉対象':   feeVal_(tr, '.fmo-wh-flag'),
+        '消費税対象': feeVal_(tr, '.fmo-taxable'),
+        '支払方法':   feeInpVal_(tr, '.fmo-payment'),
+        '入金状況':   feeInpVal_(tr, '.fmo-status'),
+        '入金日':     feeInpVal_(tr, '.fmo-date'),
+        'メモ':       feeInpVal_(tr, '.fmo-memo')
+      });
+    });
+    if (rows.length === 0) return;
+    var btn = document.getElementById('fee-monthly-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+    fetch(GAS_URL, { method:'POST', body: JSON.stringify({ action:'saveFeeMonthly', rows:rows }) })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success) {
+          feeMsg_('fee-monthly-msg');
+          _feeAllMonthlyCache = null;
+          fetchFeeMonthly();
+        } else {
+          feeErr_('fee-monthly-err', res.error || '保存に失敗しました');
+        }
+      })
+      .catch(function(e) { feeErr_('fee-monthly-err', e.message || String(e)); })
+      .finally(function() { if (btn) { btn.disabled = false; btn.textContent = '保存'; } });
+  }
+
+  function downloadFeeMonthlyCSV() {
+    var tbody = document.getElementById('fee-monthly-tbody');
+    var inp   = document.getElementById('fee-monthly-month');
+    if (!tbody || !inp) return;
+    var month = (inp.value || 'export').replace('-', '');
+    var cols  = ['会社名','担当者','顧問料','給与計算費','社会保険費','スポット請求','調整額','小計','消費税','源泉所得税','入金予定額','支払方法','入金状況','入金日','スポット内容/メモ'];
+    var lines = [cols.join(',')];
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+      lines.push([
+        feeCsvEsc_(feeVal_(tr,'.fmo-name')),
+        feeCsvEsc_(feeVal_(tr,'.fmo-tanto')),
+        feeInpVal_(tr,'.fmo-fee'), feeInpVal_(tr,'.fmo-payroll'), feeInpVal_(tr,'.fmo-social'),
+        feeInpVal_(tr,'.fmo-spot'), feeInpVal_(tr,'.fmo-adjust'),
+        feeTdNum_(tr,'.fmo-subtotal'), feeTdNum_(tr,'.fmo-tax'),
+        feeTdNum_(tr,'.fmo-whtax'), feeTdNum_(tr,'.fmo-expected'),
+        feeCsvEsc_(feeInpVal_(tr,'.fmo-payment')), feeCsvEsc_(feeInpVal_(tr,'.fmo-status')),
+        feeInpVal_(tr,'.fmo-date'), feeCsvEsc_(feeInpVal_(tr,'.fmo-memo'))
+      ].join(','));
+    });
+    feeDlCsv_(lines.join('\r\n'), '月別請求_' + month + '.csv');
+  }
+
+  // ---------- 年次集計タブ ----------
+
+  function initFeeAnnual() {
+    var sel = document.getElementById('fee-annual-year');
+    if (!sel) return;
+    if (!sel.options.length) {
+      var now = new Date();
+      var curY = now.getFullYear();
+      for (var y = curY; y >= curY - 5; y--) {
+        var opt = document.createElement('option');
+        opt.value = y; opt.textContent = y + '年';
+        sel.appendChild(opt);
+      }
+    }
+    if (_feeAllMonthlyCache) { renderFeeAnnual(); return; }
+    fetch(GAS_URL + '?action=getFeeMonthly')
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        _feeAllMonthlyCache = Array.isArray(rows) ? rows : [];
+        renderFeeAnnual();
+      })
+      .catch(function(e) { console.error('[initFeeAnnual]', e); });
+  }
+
+  function renderFeeAnnual() {
+    var sel = document.getElementById('fee-annual-year');
+    if (!sel || !_feeAllMonthlyCache) return;
+    var year = String(sel.value);
+    var rows = _feeAllMonthlyCache.filter(function(r) {
+      return String(r['対象月'] || '').slice(0, 4) === year;
+    });
+
+    // 月次サマリー集計
+    var monthMap = {};
+    rows.forEach(function(r) {
+      var m = String(r['対象月'] || '').replace('/', '-').slice(5, 7);
+      if (!m) return;
+      if (!monthMap[m]) monthMap[m] = { count:0, fee:0, payroll:0, spot:0, subtotal:0, tax:0, wh:0, expected:0 };
+      monthMap[m].count++;
+      monthMap[m].fee      += feeN_(r['顧問料']);
+      monthMap[m].payroll  += feeN_(r['給与計算費']);
+      monthMap[m].spot     += feeN_(r['スポット請求']);
+      monthMap[m].subtotal += feeN_(r['小計']);
+      monthMap[m].tax      += feeN_(r['消費税']);
+      monthMap[m].wh       += feeN_(r['源泉所得税']);
+      monthMap[m].expected += feeN_(r['入金予定額']);
+    });
+
+    var months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    var tFee=0,tPay=0,tSpot=0,tSub=0,tTax=0,tWh=0,tExp=0,tCnt=0;
+    var tbody = document.getElementById('fee-annual-monthly-tbody');
+    var tfoot = document.getElementById('fee-annual-monthly-tfoot');
+
+    if (tbody) {
+      tbody.innerHTML = months.map(function(m) {
+        var d = monthMap[m];
+        if (!d) return '<tr><td>' + year + '/' + m + '</td><td colspan="8" style="color:#ccc;text-align:center;">-</td></tr>';
+        tFee+=d.fee; tPay+=d.payroll; tSpot+=d.spot;
+        tSub+=d.subtotal; tTax+=d.tax; tWh+=d.wh; tExp+=d.expected; tCnt+=d.count;
+        return '<tr><td>' + year + '/' + m + '</td>' +
+          '<td>' + d.count + '</td>' +
+          '<td>' + feeFmt_(d.fee)      + '</td>' +
+          '<td>' + feeFmt_(d.payroll)  + '</td>' +
+          '<td>' + feeFmt_(d.spot)     + '</td>' +
+          '<td>' + feeFmt_(d.subtotal) + '</td>' +
+          '<td>' + feeFmt_(d.tax)      + '</td>' +
+          '<td>' + feeFmt_(d.wh)       + '</td>' +
+          '<td>' + feeFmt_(d.expected) + '</td></tr>';
+      }).join('');
+    }
+    if (tfoot) {
+      tfoot.innerHTML = '<tr>' +
+        '<td>合計</td><td>' + tCnt + '</td>' +
+        '<td>' + feeFmt_(tFee)  + '</td><td>' + feeFmt_(tPay)  + '</td>' +
+        '<td>' + feeFmt_(tSpot) + '</td><td>' + feeFmt_(tSub)  + '</td>' +
+        '<td>' + feeFmt_(tTax)  + '</td><td>' + feeFmt_(tWh)   + '</td>' +
+        '<td>' + feeFmt_(tExp)  + '</td></tr>';
+    }
+
+    // クライアント別集計 → 上位4社
+    var clientMap = {};
+    rows.forEach(function(r) {
+      var name = String(r['会社名'] || '').trim();
+      if (!name) return;
+      if (!clientMap[name]) clientMap[name] = 0;
+      clientMap[name] += feeN_(r['入金予定額']);
+    });
+    var sorted = Object.keys(clientMap)
+      .map(function(n) { return { name:n, total:clientMap[n] }; })
+      .sort(function(a,b) { return b.total - a.total; });
+    var top4   = sorted.slice(0, 4);
+    var top4El = document.getElementById('fee-top4-list');
+    if (top4El) {
+      if (top4.length === 0) {
+        top4El.innerHTML = '<div style="color:#9e9e9e;padding:16px;font-size:0.88rem;">データがありません</div>';
+      } else {
+        var ranks = ['🥇','🥈','🥉','4️⃣'];
+        top4El.innerHTML = top4.map(function(c, i) {
+          return '<div class="fee-top4-row">' +
+            '<div class="fee-top4-rank">' + ranks[i] + '</div>' +
+            '<div class="fee-top4-name">' + feeEsc_(c.name) + '</div>' +
+            '<div class="fee-top4-amt">' + feeFmt_(c.total) + '円</div>' +
+            '</div>';
+        }).join('');
+      }
+    }
+  }
+
+  function downloadFeeAnnualCSV() {
+    var sel = document.getElementById('fee-annual-year');
+    if (!sel || !_feeAllMonthlyCache) return;
+    var year = String(sel.value);
+    var rows = _feeAllMonthlyCache.filter(function(r) { return String(r['対象月'] || '').slice(0,4) === year; });
+    var cols = ['対象月','会社名','担当者','顧問料','給与計算費','社会保険費','スポット請求','調整額','小計','消費税','源泉所得税','入金予定額','支払方法','入金状況','入金日','メモ'];
+    var lines = [cols.join(',')];
+    rows.forEach(function(r) {
+      lines.push(cols.map(function(h) {
+        var v = r[h] !== undefined ? r[h] : '';
+        return typeof v === 'number' ? v : feeCsvEsc_(String(v));
+      }).join(','));
+    });
+    feeDlCsv_(lines.join('\r\n'), '年次集計_' + year + '.csv');
+  }
+
+  // ---------- 顧問料管理ユーティリティ ----------
+
+  function feeN_(v) {
+    if (v === null || v === undefined || v === '') return 0;
+    var n = parseFloat(String(v).replace(/,/g, ''));
+    return isNaN(n) ? 0 : n;
+  }
+  function feeFmt_(n) {
+    if (n === null || n === undefined || isNaN(n)) return '0';
+    return Math.round(n).toLocaleString('ja-JP');
+  }
+  function feeEsc_(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function feeVal_(el, cls) {
+    var found = el.querySelector(cls);
+    if (!found) return '';
+    return found.value !== undefined ? found.value : found.textContent;
+  }
+  function feeInpVal_(el, cls) {
+    var found = el.querySelector(cls);
+    return found ? found.value : '';
+  }
+  function feeChk_(el, cls) {
+    var found = el.querySelector(cls);
+    return (found && found.checked) ? 'TRUE' : 'FALSE';
+  }
+  function feeTdNum_(tr, cls) {
+    var el = tr.querySelector(cls);
+    return el ? feeN_(el.textContent.replace(/,/g,'')) : 0;
+  }
+  function feeTdSet_(tr, cls, val) {
+    var el = tr.querySelector(cls);
+    if (el) el.textContent = feeFmt_(val);
+  }
+  function feeDateInp_(v) {
+    if (!v) return '';
+    var s = String(v).trim();
+    var m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return '';
+    return m[1] + '-' + String(parseInt(m[2],10)).padStart(2,'0') + '-' + String(parseInt(m[3],10)).padStart(2,'0');
+  }
+  function feePayOpts_(val) {
+    return ['口座振替','振込','現金'].map(function(o) {
+      return '<option value="' + o + '"' + (val === o ? ' selected' : '') + '>' + o + '</option>';
+    }).join('');
+  }
+  function feeStatusOpts_(val) {
+    return ['未入金','入金済','一部入金'].map(function(o) {
+      return '<option value="' + o + '"' + (val === o ? ' selected' : '') + '>' + o + '</option>';
+    }).join('');
+  }
+  function feeCsvEsc_(s) {
+    s = String(s || '');
+    if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+      return '"' + s.replace(/"/g,'""') + '"';
+    }
+    return s;
+  }
+  function feeCsvLine_(line) {
+    var result=[], cur='', inQ=false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line[i];
+      if (c === '"') { inQ = !inQ; continue; }
+      if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
+      cur += c;
+    }
+    result.push(cur.trim());
+    return result;
+  }
+  function feeDlCsv_(content, filename) {
+    var blob = new Blob(['﻿' + content], { type:'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href   = url; a.download = filename; a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+  }
+  function feeMsg_(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = '';
+    setTimeout(function() { el.style.display = 'none'; }, 3000);
+  }
+  function feeErr_(id, msg) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = 'エラー: ' + msg;
+    el.style.display = '';
+    setTimeout(function() { el.style.display = 'none'; }, 6000);
+  }
+
   // ===== 初期化 =====
 
   // 日付挨拶の表示
@@ -6999,6 +7983,7 @@
     try { renderTimeSummary(); } catch(e) { console.error('[初期化] renderTimeSummary エラー:', e); }
     try { renderActivityList(); } catch(e) { console.error('[初期化] renderActivityList エラー:', e); }
     try { renderTodaySchedule(); } catch(e) { console.error('[初期化] renderTodaySchedule エラー:', e); }
+    try { loadTodayWorkAvail();  } catch(e) { console.error('[初期化] loadTodayWorkAvail エラー:', e); }
     // 一言メッセージ: 宛先を自分以外にデフォルト設定
     try {
       var myId = localStorage.getItem('myMemberId') || 'hamada';
@@ -7011,6 +7996,234 @@
   }).catch(function(e) {
     console.error('[初期化] データ取得でエラー:', e);
   });
+
+  // ===== 勤務予定共有 =====
+  (function() {
+    var now = new Date();
+    window._waInputMonth = now.getFullYear() + '-' + ('0'+(now.getMonth()+1)).slice(-2);
+    window._waCalMonth   = window._waInputMonth;
+    window._waCache      = {};
+  })();
+
+  var WA_STATUS_INFO = {
+    '勤務可': { cls:'wa-status-ok',   calCls:'status-ok',   label:'勤務可' },
+    '一部可': { cls:'wa-status-part', calCls:'status-part', label:'一部可' },
+    '休み':   { cls:'wa-status-off',  calCls:'status-off',  label:'休み'   },
+    '未定':   { cls:'wa-status-tbd',  calCls:'status-tbd',  label:'未定'   }
+  };
+
+  function waMonthLabel(ym) {
+    var p = ym.split('-');
+    return p[0] + '年' + parseInt(p[1], 10) + '月';
+  }
+
+  function initWorkAvailabilityPage() {
+    var myId = localStorage.getItem('myMemberId') || 'hamada';
+    var ss = document.getElementById('wa-staff-sel');
+    if (ss) ss.value = myId;
+    var cs = document.getElementById('wa-cal-staff-sel');
+    if (cs) cs.value = myId;
+    document.getElementById('wa-input-month-label').textContent = waMonthLabel(window._waInputMonth);
+    document.getElementById('wa-cal-month-label').textContent   = waMonthLabel(window._waCalMonth);
+    // デフォルトで入力タブを表示
+    document.getElementById('wa-panel-input').style.display    = '';
+    document.getElementById('wa-panel-calendar').style.display = 'none';
+    document.querySelectorAll('.wa-tab').forEach(function(t,i){ t.classList.toggle('active', i===0); });
+    loadAndRenderWaInput();
+    loadAndRenderWaCalendar();
+  }
+
+  function switchWorkAvailTab(tab, el) {
+    document.querySelectorAll('.wa-tab').forEach(function(t) { t.classList.remove('active'); });
+    el.classList.add('active');
+    document.getElementById('wa-panel-input').style.display    = tab === 'input'    ? '' : 'none';
+    document.getElementById('wa-panel-calendar').style.display = tab === 'calendar' ? '' : 'none';
+  }
+
+  function changeWorkAvailMonth(delta) {
+    var p = window._waInputMonth.split('-');
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10) + delta;
+    if (m > 12) { m = 1; y++; } else if (m < 1) { m = 12; y--; }
+    window._waInputMonth = y + '-' + ('0'+m).slice(-2);
+    document.getElementById('wa-input-month-label').textContent = waMonthLabel(window._waInputMonth);
+    loadAndRenderWaInput();
+  }
+
+  function changeWorkAvailCalMonth(delta) {
+    var p = window._waCalMonth.split('-');
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10) + delta;
+    if (m > 12) { m = 1; y++; } else if (m < 1) { m = 12; y--; }
+    window._waCalMonth = y + '-' + ('0'+m).slice(-2);
+    document.getElementById('wa-cal-month-label').textContent = waMonthLabel(window._waCalMonth);
+    loadAndRenderWaCalendar();
+  }
+
+  function loadWorkAvailability(staffId, month) {
+    return fetch(GAS_URL + '?action=getWorkAvailability&staff_id=' + encodeURIComponent(staffId) + '&month=' + encodeURIComponent(month))
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        var map = {};
+        (Array.isArray(rows) ? rows : []).forEach(function(row) {
+          if (row.date) map[String(row.date)] = row;
+        });
+        window._waCache[staffId + '_' + month] = map;
+        return map;
+      })
+      .catch(function(e) { console.error('[loadWorkAvailability]', e); return {}; });
+  }
+
+  function loadAndRenderWaInput() {
+    var staffId = (document.getElementById('wa-staff-sel') || {}).value || 'hamada';
+    var tbody = document.getElementById('wa-input-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#bbb;padding:16px;">読み込み中…</td></tr>';
+    loadWorkAvailability(staffId, window._waInputMonth).then(function(map) {
+      renderWorkAvailabilityInput(staffId, window._waInputMonth, map);
+    });
+  }
+
+  function loadAndRenderWaCalendar() {
+    var staffId = (document.getElementById('wa-cal-staff-sel') || {}).value || 'hamada';
+    var grid = document.getElementById('wa-calendar-grid');
+    if (grid) grid.innerHTML = '<div style="text-align:center;color:#bbb;padding:24px;">読み込み中…</div>';
+    loadWorkAvailability(staffId, window._waCalMonth).then(function(map) {
+      renderWorkAvailabilityCalendar(staffId, window._waCalMonth, map);
+    });
+  }
+
+  function renderWorkAvailabilityInput(staffId, month, map) {
+    var tbody = document.getElementById('wa-input-tbody');
+    if (!tbody) return;
+    var p = month.split('-');
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    var daysInMonth = new Date(y, m, 0).getDate();
+    var today = todayJST();
+    var WDAYS = ['日','月','火','水','木','金','土'];
+    var html = '';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateStr = y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
+      var dow = new Date(y, m-1, d).getDay();
+      var dayClass = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
+      var rec = map[dateStr] || {};
+      var statusOptions = ['', '勤務可', '一部可', '休み', '未定'].map(function(s) {
+        return '<option value="' + s + '"' + (s === (rec.status||'') ? ' selected' : '') + '>' + (s || '未設定') + '</option>';
+      }).join('');
+      html += '<tr' + (dateStr === today ? ' style="background:#f0f9f3;"' : '') + '>' +
+        '<td class="wa-date-cell ' + dayClass + '">' + m + '/' + d + '（' + WDAYS[dow] + '）</td>' +
+        '<td><select class="wa-status-sel" data-date="' + dateStr + '" data-field="status">' + statusOptions + '</select></td>' +
+        '<td><input type="time" class="wa-time-inp" data-date="' + dateStr + '" data-field="start_time" value="' + esc(rec.start_time||'') + '" /></td>' +
+        '<td><input type="time" class="wa-time-inp" data-date="' + dateStr + '" data-field="end_time"   value="' + esc(rec.end_time||'')   + '" /></td>' +
+        '<td><input type="text"  class="wa-memo-inp" data-date="' + dateStr + '" data-field="memo"       value="' + esc(rec.memo||'')       + '" placeholder="メモ（任意）" /></td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
+  function renderWorkAvailabilityCalendar(staffId, month, map) {
+    var grid = document.getElementById('wa-calendar-grid');
+    if (!grid) return;
+    var p = month.split('-');
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    var daysInMonth = new Date(y, m, 0).getDate();
+    var firstDow = new Date(y, m-1, 1).getDay();
+    var today = todayJST();
+    var html = '';
+    for (var e2 = 0; e2 < firstDow; e2++) html += '<div class="wa-cal-cell empty"></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateStr = y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
+      var dow = (firstDow + d - 1) % 7;
+      var rec = map[dateStr] || {};
+      var si = WA_STATUS_INFO[rec.status] || {};
+      var dayCls = dow === 0 ? ' sun' : (dow === 6 ? ' sat' : '');
+      var badge = rec.status ? '<span class="wa-cal-status ' + (si.cls||'') + '">' + (si.label||rec.status) + '</span>' : '';
+      var timeHtml = (rec.start_time || rec.end_time) ? '<div class="wa-cal-time">' + esc(rec.start_time||'') + (rec.end_time ? '〜' + esc(rec.end_time) : '') + '</div>' : '';
+      var memoHtml = rec.memo ? '<div class="wa-cal-memo" title="' + esc(rec.memo) + '">' + esc(rec.memo) + '</div>' : '';
+      html += '<div class="wa-cal-cell ' + (si.calCls||'') + (dateStr === today ? ' wa-today' : '') + '">' +
+        '<div class="wa-cal-day' + dayCls + '">' + d + '</div>' +
+        badge + timeHtml + memoHtml + '</div>';
+    }
+    var total = firstDow + daysInMonth;
+    var rem = (7 - (total % 7)) % 7;
+    for (var r = 0; r < rem; r++) html += '<div class="wa-cal-cell empty"></div>';
+    grid.innerHTML = html;
+  }
+
+  function saveWorkAvailability() {
+    var staffSel  = document.getElementById('wa-staff-sel');
+    var staffId   = staffSel ? staffSel.value : 'hamada';
+    var staffName = staffId === 'hamada' ? '濱田' : '髙嵜';
+    var tbody     = document.getElementById('wa-input-tbody');
+    if (!tbody) return;
+    var records = [], hasWarning = false;
+    tbody.querySelectorAll('tr').forEach(function(row) {
+      var statusSel = row.querySelector('[data-field="status"]');
+      var startInp  = row.querySelector('[data-field="start_time"]');
+      var endInp    = row.querySelector('[data-field="end_time"]');
+      var memoInp   = row.querySelector('[data-field="memo"]');
+      if (!statusSel) return;
+      var startTime = startInp ? startInp.value : '';
+      var endTime   = endInp   ? endInp.value   : '';
+      if (startTime && (startTime < '05:00' || startTime >= '22:00')) hasWarning = true;
+      if (endTime   && (endTime   < '05:00' || endTime   >  '22:00')) hasWarning = true;
+      records.push({
+        date:       statusSel.getAttribute('data-date'),
+        status:     statusSel.value,
+        start_time: startTime,
+        end_time:   endTime,
+        memo:       memoInp ? memoInp.value : ''
+      });
+    });
+    if (hasWarning && !confirm('22:00〜5:00の時間帯が含まれています。このまま保存しますか？')) return;
+    var msgEl = document.getElementById('wa-input-msg');
+    if (msgEl) msgEl.textContent = '保存中…';
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(JSON.stringify({
+        action: 'saveWorkAvailability',
+        staff_id: staffId,
+        staff_name: staffName,
+        records: records
+      }))
+    }).then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success) {
+          if (msgEl) msgEl.textContent = '✅ 保存しました（' + res.count + '件）';
+          loadWorkAvailability(staffId, window._waInputMonth).then(function() { renderTodayWorkAvail(); });
+        } else {
+          if (msgEl) msgEl.textContent = '❌ 保存に失敗しました: ' + (res.error || '');
+        }
+        setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 5000);
+      })
+      .catch(function(err) {
+        if (msgEl) msgEl.textContent = '❌ エラー: ' + err.message;
+      });
+  }
+
+  function loadTodayWorkAvail() {
+    var today = todayJST();
+    var myId  = localStorage.getItem('myMemberId') || 'hamada';
+    loadWorkAvailability(myId, today.substring(0, 7)).then(function() { renderTodayWorkAvail(); });
+  }
+
+  function renderTodayWorkAvail() {
+    var content = document.getElementById('work-avail-today-content');
+    if (!content) return;
+    var today  = todayJST();
+    var myId   = localStorage.getItem('myMemberId') || 'hamada';
+    var cacheKey = myId + '_' + today.substring(0, 7);
+    var map    = window._waCache[cacheKey] || {};
+    var rec    = map[today];
+    if (!rec || !rec.status) {
+      content.innerHTML = '<span style="color:#bbb;font-size:0.78rem;">未登録</span>';
+      return;
+    }
+    var si = WA_STATUS_INFO[rec.status] || {};
+    var badge = '<span class="wa-cal-status ' + (si.cls||'') + '">' + (si.label||rec.status) + '</span>';
+    var times = (rec.start_time || rec.end_time) ? '<div style="font-size:0.85rem;margin-top:3px;">' + esc(rec.start_time||'') + (rec.end_time ? '〜' + esc(rec.end_time) : '') + '</div>' : '';
+    var memo  = rec.memo ? '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">メモ：' + esc(rec.memo) + '</div>' : '';
+    content.innerHTML = badge + times + memo;
+  }
+
 </script>
 <script>
   (function () {
