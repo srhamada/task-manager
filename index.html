@@ -8060,17 +8060,24 @@
   }
 
   function loadWorkAvailability(staffId, month) {
-    return fetch(GAS_URL + '?action=getWorkAvailability&staff_id=' + encodeURIComponent(staffId) + '&month=' + encodeURIComponent(month))
+    var url = GAS_URL + '?action=getWorkAvailability&staff_id=' + encodeURIComponent(staffId) + '&month=' + encodeURIComponent(month);
+    console.log('[WA] fetch:', url);
+    return fetch(url)
       .then(function(r) { return r.json(); })
       .then(function(rows) {
+        console.log('[WA] received rows:', Array.isArray(rows) ? rows.length + '件' : '配列でない', rows);
         var map = {};
         (Array.isArray(rows) ? rows : []).forEach(function(row) {
-          if (row.date) map[String(row.date)] = row;
+          if (row.date) {
+            console.log('[WA] row.date=' + row.date + ' start_time=' + row.start_time + ' end_time=' + row.end_time + ' status=' + row.status + ' staff_id=' + row.staff_id);
+            map[String(row.date)] = row;
+          }
         });
+        console.log('[WA] mapキー一覧:', Object.keys(map));
         window._waCache[staffId + '_' + month] = map;
         return map;
       })
-      .catch(function(e) { console.error('[loadWorkAvailability]', e); return {}; });
+      .catch(function(e) { console.error('[WA] loadWorkAvailabilityエラー:', e); return {}; });
   }
 
   function loadAndRenderWaInput() {

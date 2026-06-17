@@ -1293,6 +1293,7 @@ function handleGetWorkAvailability_(e) {
 
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
+  Logger.log('[getWorkAvailability] headers=' + JSON.stringify(headers) + ' 全行数=' + (data.length - 1));
   var result  = [];
   var timeColumns = ['start_time', 'end_time'];
   for (var i = 1; i < data.length; i++) {
@@ -1303,13 +1304,17 @@ function handleGetWorkAvailability_(e) {
         var fmt = (timeColumns.indexOf(headers[j]) !== -1) ? 'HH:mm' : 'yyyy-MM-dd';
         v = Utilities.formatDate(v, 'Asia/Tokyo', fmt);
       }
-      obj[headers[j]] = v;
+      obj[headers[j]] = (v === null || v === undefined) ? '' : v;
     }
-    if (staffId && String(obj['staff_id']) !== staffId) continue;
-    if (month   && String(obj['date']).substring(0, 7) !== month) continue;
+    var rowStaffId = String(obj['staff_id'] || '');
+    var rowDate    = String(obj['date']     || '');
+    Logger.log('[getWorkAvailability] row' + i + ': staff_id=' + rowStaffId + ' date=' + rowDate + ' start_time=' + obj['start_time'] + ' end_time=' + obj['end_time']);
+    if (staffId && rowStaffId !== staffId) { Logger.log('  → staff_id不一致スキップ'); continue; }
+    if (month   && rowDate.substring(0, 7) !== month) { Logger.log('  → month不一致スキップ month判定=' + rowDate.substring(0,7)); continue; }
     result.push(obj);
   }
-  Logger.log('[getWorkAvailability] 件数=' + result.length);
+  Logger.log('[getWorkAvailability] 返却件数=' + result.length);
+  if (result.length > 0) Logger.log('[getWorkAvailability] 先頭row=' + JSON.stringify(result[0]));
   return jsonResponse_(result);
 }
 
