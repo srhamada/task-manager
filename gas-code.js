@@ -1286,6 +1286,7 @@ function ensureWorkAvailabilitySheet_() {
 }
 
 function handleGetWorkAvailability_(e) {
+  Logger.log('===== handleGetWorkAvailability_ NEW CODE v76 =====');
   var sheet   = ensureWorkAvailabilitySheet_();
   var staffId = (e && e.parameter && e.parameter.staff_id) ? e.parameter.staff_id : '';
   var month   = (e && e.parameter && e.parameter.month)    ? e.parameter.month    : '';
@@ -1293,7 +1294,7 @@ function handleGetWorkAvailability_(e) {
 
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
-  Logger.log('[getWorkAvailability] headers=' + JSON.stringify(headers) + ' 全行数=' + (data.length - 1));
+  Logger.log('[getWorkAvailability] 全行数=' + (data.length - 1));
   var timeColumns = ['start_time', 'end_time'];
   // 日付をキーに1件ずつ集約（時間入り行を優先）
   var resultMap = {};
@@ -1301,9 +1302,16 @@ function handleGetWorkAvailability_(e) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
       var v = data[i][j];
+      // 先頭3行のみ型ログ（詳細確認用）
+      if (i <= 3 && (headers[j] === 'start_time' || headers[j] === 'end_time')) {
+        Logger.log('[WA raw] row' + i + ' col=' + headers[j] + ' value=' + v + ' type=' + Object.prototype.toString.call(v) + ' isDate=' + (v instanceof Date));
+      }
       if (v instanceof Date) {
         var fmt = (timeColumns.indexOf(headers[j]) !== -1) ? 'HH:mm' : 'yyyy-MM-dd';
         v = Utilities.formatDate(v, 'Asia/Tokyo', fmt);
+        if (i <= 3 && (headers[j] === 'start_time' || headers[j] === 'end_time')) {
+          Logger.log('[WA fmt]  row' + i + ' col=' + headers[j] + ' formatted=' + v);
+        }
       }
       obj[headers[j]] = (v === null || v === undefined) ? '' : v;
     }
@@ -1350,9 +1358,11 @@ function handleSaveWorkAvailability_(ss, data) {
 
   var allData    = sheet.getDataRange().getValues();
   var headers    = allData[0];
-  var idCol      = headers.indexOf('id');
-  var dateCol    = headers.indexOf('date');
-  var staffIdCol = headers.indexOf('staff_id');
+  var idCol         = headers.indexOf('id');
+  var dateCol       = headers.indexOf('date');
+  var staffIdCol    = headers.indexOf('staff_id');
+  var startTimeCol  = headers.indexOf('start_time') + 1; // 1-indexed (0→未見つかり)
+  var endTimeCol    = headers.indexOf('end_time')   + 1;
 
   // 既存行を (staff_id + '_' + date) → シート行番号 でマップ化
   // date列がDate型の場合は yyyy-MM-dd に正規化してキーを作る
@@ -1371,14 +1381,17 @@ function handleSaveWorkAvailability_(ss, data) {
     if (!dateStr) continue;
 
     var rowKey  = staffId + '_' + dateStr;
+    var startVal = String(rec.start_time || '');
+    var endVal   = String(rec.end_time   || '');
+    Logger.log('[saveWorkAvailability] key=' + rowKey + ' start=' + startVal + ' end=' + endVal);
     var rowData = [
       '',                             // A: id
       staffId,                        // B: staff_id
       staffName,                      // C: staff_name
       dateStr,                        // D: date
       String(rec.status     || ''),   // E: status
-      String(rec.start_time || ''),   // F: start_time
-      String(rec.end_time   || ''),   // G: end_time
+      startVal,                       // F: start_time
+      endVal,                         // G: end_time
       String(rec.memo       || ''),   // H: memo
       nowJST                          // I: updated_at
     ];
@@ -1386,11 +1399,18 @@ function handleSaveWorkAvailability_(ss, data) {
     if (existMap[rowKey]) {
       var rowNum  = existMap[rowKey];
       rowData[idCol] = allData[rowNum - 1][idCol]; // id は変えない
+      // start_time / end_time セルをテキスト形式にしてから保存（Sheetsの自動変換を防ぐ）
+      if (startTimeCol > 0) sheet.getRange(rowNum, startTimeCol).setNumberFormat('@');
+      if (endTimeCol   > 0) sheet.getRange(rowNum, endTimeCol).setNumberFormat('@');
       sheet.getRange(rowNum, 1, 1, headers.length).setValues([rowData]);
     } else {
       rowData[idCol] = baseTs + ('0' + k).slice(-2);
-      sheet.appendRow(rowData);
-      existMap[rowKey] = sheet.getLastRow();
+      // 新規行：テキスト形式指定後に書き込む（appendRow はフォーマット指定不可のため setValues を使用）
+      var newRow = sheet.getLastRow() + 1;
+      if (startTimeCol > 0) sheet.getRange(newRow, startTimeCol).setNumberFormat('@');
+      if (endTimeCol   > 0) sheet.getRange(newRow, endTimeCol).setNumberFormat('@');
+      sheet.getRange(newRow, 1, 1, headers.length).setValues([rowData]);
+      existMap[rowKey] = newRow;
     }
     count++;
   }

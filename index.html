@@ -8092,10 +8092,10 @@
           }
         });
         console.log('[WA] mapキー一覧(' + Object.keys(map).length + '件):', Object.keys(map));
-        // 確認2: picked rows の中身（start_time/end_time が空か確認用）
-        console.log('[WA] picked rows:', Object.values(map).map(function(r) {
-          return { date: r.date, status: r.status, start_time: r.start_time, end_time: r.end_time, memo: r.memo, updated_at: r.updated_at };
-        }));
+        // 確認2: picked rows の中身（JSON.stringify で折りたたまれずに表示）
+        console.log('[WA] picked rows JSON:', JSON.stringify(Object.values(map).map(function(r) {
+          return { date: r.date, status: r.status, start_time: r.start_time, end_time: r.end_time, updated_at: r.updated_at };
+        }), null, 2));
         window._waCache[staffId + '_' + month] = map;
         return map;
       })
@@ -8189,7 +8189,7 @@
       var fmtEnd   = formatTimeHHMM(rec.end_time);
       var timeHtml = (fmtStart || fmtEnd) ? '<div class="wa-cal-time">' + esc(fmtStart) + '〜' + esc(fmtEnd) + '</div>' : '';
       // 確認3: カレンダー描画時の時間ログ（勤務可の日のみ）
-      if (rec.status && rec.status !== '休み') console.log('[WA calendar]', dateStr, { rawStart: rec.start_time, rawEnd: rec.end_time, fmtStart: fmtStart, fmtEnd: fmtEnd, timeHtml: timeHtml });
+      if (rec.status && rec.status !== '休み') console.log('[WA calendar JSON]', JSON.stringify({ date: dateStr, rawStart: rec.start_time, rawEnd: rec.end_time, fmtStart: fmtStart, fmtEnd: fmtEnd, hasTimeHtml: timeHtml !== '' }));
       var memoHtml = rec.memo ? '<div class="wa-cal-memo" title="' + esc(rec.memo) + '">' + esc(rec.memo) + '</div>' : '';
       html += '<div class="wa-cal-cell ' + (si.calCls||'') + (dateStr === today ? ' wa-today' : '') + '">' +
         '<div class="wa-cal-day' + dayCls + '">' + d + '</div>' +
