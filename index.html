@@ -767,9 +767,15 @@
     .wa-cal-cell.status-part{background:#fffde7;}
     .wa-cal-cell.status-off {background:#f5f5f5;}
     .wa-cal-cell.status-tbd {background:#f8f0fc;}
+    /* 勤務予定保存トースト通知 */
+    #wa-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;padding:10px 24px;border-radius:24px;font-size:0.9rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.15);pointer-events:none;opacity:0;transition:opacity 0.3s;}
+    #wa-toast.wa-toast-ok {background:#e8faf3;color:#1b7a5a;border:1px solid #52c78a;}
+    #wa-toast.wa-toast-err{background:#fdecea;color:#c0392b;border:1px solid #e57373;}
+    #wa-toast.wa-toast-show{opacity:1;}
   </style>
 </head>
 <body>
+<div id="wa-toast"></div>
 
 <!-- ハンバーガーメニューボタン（スマホ用） -->
 <!-- テーマ切替 -->
@@ -974,7 +980,7 @@
           </div>
           <!-- 本日の勤務予定 -->
           <div onclick="showPageByName('work-avail')" class="busy-season-card" style="background:linear-gradient(135deg,#e8faf3 0%,#d0f0e4 100%);border-left-color:#52c78a;">
-            <div class="busy-season-title" style="color:#1b5e3a;">🍉 本日の勤務予定</div>
+            <div class="busy-season-title" style="color:#1b5e3a;">🍉 本日の髙嵜</div>
             <div id="work-avail-today-content" class="busy-season-body" style="white-space:normal;line-height:1.5;min-height:28px;">
               <span style="color:#9e9e9e;font-size:0.75rem;">読み込み中…</span>
             </div>
@@ -8098,16 +8104,30 @@
       var dateStr = y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
       var dow = new Date(y, m-1, d).getDay();
       var dayClass = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
-      var rec = map[dateStr] || {};
+      var saved = map[dateStr];
+      var rec = saved || {};
+      // 未保存の日はデフォルト値を適用（保存済みデータは上書きしない）
+      var defStatus = '', defStart = '', defEnd = '';
+      if (!saved) {
+        if (isNonBusinessDay(dateStr)) {
+          defStatus = '休み';
+        } else {
+          defStatus = '勤務可'; defStart = '09:30'; defEnd = '14:30';
+        }
+      }
+      var curStatus = saved ? (rec.status||'') : defStatus;
+      var curStart  = saved ? (rec.start_time||'') : defStart;
+      var curEnd    = saved ? (rec.end_time||'')   : defEnd;
+      var curMemo   = rec.memo || '';
       var statusOptions = ['', '勤務可', '一部可', '休み', '未定'].map(function(s) {
-        return '<option value="' + s + '"' + (s === (rec.status||'') ? ' selected' : '') + '>' + (s || '未設定') + '</option>';
+        return '<option value="' + s + '"' + (s === curStatus ? ' selected' : '') + '>' + (s || '未設定') + '</option>';
       }).join('');
       html += '<tr' + (dateStr === today ? ' style="background:#f0f9f3;"' : '') + '>' +
         '<td class="wa-date-cell ' + dayClass + '">' + m + '/' + d + '（' + WDAYS[dow] + '）</td>' +
         '<td><select class="wa-status-sel" data-date="' + dateStr + '" data-field="status">' + statusOptions + '</select></td>' +
-        '<td><input type="time" class="wa-time-inp" data-date="' + dateStr + '" data-field="start_time" value="' + esc(rec.start_time||'') + '" /></td>' +
-        '<td><input type="time" class="wa-time-inp" data-date="' + dateStr + '" data-field="end_time"   value="' + esc(rec.end_time||'')   + '" /></td>' +
-        '<td><input type="text"  class="wa-memo-inp" data-date="' + dateStr + '" data-field="memo"       value="' + esc(rec.memo||'')       + '" placeholder="メモ（任意）" /></td>' +
+        '<td><input type="time" class="wa-time-inp" data-date="' + dateStr + '" data-field="start_time" value="' + esc(curStart) + '" /></td>' +
+        '<td><input type="time" class="wa-time-inp" data-date="' + dateStr + '" data-field="end_time"   value="' + esc(curEnd)   + '" /></td>' +
+        '<td><input type="text"  class="wa-memo-inp" data-date="' + dateStr + '" data-field="memo"       value="' + esc(curMemo)  + '" placeholder="メモ（任意）" /></td>' +
         '</tr>';
     }
     tbody.innerHTML = html;
@@ -8140,6 +8160,17 @@
     var rem = (7 - (total % 7)) % 7;
     for (var r = 0; r < rem; r++) html += '<div class="wa-cal-cell empty"></div>';
     grid.innerHTML = html;
+  }
+
+  function showWaToast(msg, isError) {
+    var el = document.getElementById('wa-toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = isError ? 'wa-toast-err wa-toast-show' : 'wa-toast-ok wa-toast-show';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(function() {
+      el.classList.remove('wa-toast-show');
+    }, 3000);
   }
 
   function saveWorkAvailability() {
@@ -8182,15 +8213,17 @@
     }).then(function(r) { return r.json(); })
       .then(function(res) {
         if (res.success) {
-          if (msgEl) msgEl.textContent = '✅ 保存しました（' + res.count + '件）';
+          if (msgEl) msgEl.textContent = '';
+          showWaToast('保存しました', false);
           loadWorkAvailability(staffId, window._waInputMonth).then(function() { renderTodayWorkAvail(); });
         } else {
-          if (msgEl) msgEl.textContent = '❌ 保存に失敗しました: ' + (res.error || '');
+          if (msgEl) msgEl.textContent = '';
+          showWaToast('保存に失敗しました: ' + (res.error || ''), true);
         }
-        setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 5000);
       })
       .catch(function(err) {
-        if (msgEl) msgEl.textContent = '❌ エラー: ' + err.message;
+        if (msgEl) msgEl.textContent = '';
+        showWaToast('エラー: ' + err.message, true);
       });
   }
 
