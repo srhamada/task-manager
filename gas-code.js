@@ -1294,11 +1294,15 @@ function handleGetWorkAvailability_(e) {
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
   var result  = [];
+  var timeColumns = ['start_time', 'end_time'];
   for (var i = 1; i < data.length; i++) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
       var v = data[i][j];
-      if (v instanceof Date) v = Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+      if (v instanceof Date) {
+        var fmt = (timeColumns.indexOf(headers[j]) !== -1) ? 'HH:mm' : 'yyyy-MM-dd';
+        v = Utilities.formatDate(v, 'Asia/Tokyo', fmt);
+      }
       obj[headers[j]] = v;
     }
     if (staffId && String(obj['staff_id']) !== staffId) continue;
