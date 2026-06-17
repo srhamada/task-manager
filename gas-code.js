@@ -1294,8 +1294,9 @@ function handleGetWorkAvailability_(e) {
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
   Logger.log('[getWorkAvailability] headers=' + JSON.stringify(headers) + ' 全行数=' + (data.length - 1));
-  var result  = [];
   var timeColumns = ['start_time', 'end_time'];
+  // 日付をキーに1件ずつ集約（時間入り行を優先）
+  var resultMap = {};
   for (var i = 1; i < data.length; i++) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
@@ -1308,14 +1309,36 @@ function handleGetWorkAvailability_(e) {
     }
     var rowStaffId = String(obj['staff_id'] || '');
     var rowDate    = String(obj['date']     || '');
-    Logger.log('[getWorkAvailability] row' + i + ': staff_id=' + rowStaffId + ' date=' + rowDate + ' start_time=' + obj['start_time'] + ' end_time=' + obj['end_time']);
-    if (staffId && rowStaffId !== staffId) { Logger.log('  → staff_id不一致スキップ'); continue; }
-    if (month   && rowDate.substring(0, 7) !== month) { Logger.log('  → month不一致スキップ month判定=' + rowDate.substring(0,7)); continue; }
-    result.push(obj);
+    if (staffId && rowStaffId !== staffId) continue;
+    if (month   && rowDate.substring(0, 7) !== month) continue;
+    if (!rowDate) continue;
+    var existing = resultMap[rowDate];
+    if (!existing) {
+      resultMap[rowDate] = obj;
+    } else {
+      // 時間入りの行を優先し、両方同条件なら updated_at が新しい方を採用
+      var newHasTime  = hasValidTime_(obj['start_time'])      || hasValidTime_(obj['end_time']);
+      var exstHasTime = hasValidTime_(existing['start_time']) || hasValidTime_(existing['end_time']);
+      if (newHasTime && !exstHasTime) {
+        resultMap[rowDate] = obj;
+      } else if (newHasTime === exstHasTime) {
+        if (String(obj['updated_at']) > String(existing['updated_at'])) resultMap[rowDate] = obj;
+      }
+      // !newHasTime && exstHasTime → 既存を維持
+    }
   }
-  Logger.log('[getWorkAvailability] 返却件数=' + result.length);
+  var result = Object.keys(resultMap).map(function(k) { return resultMap[k]; });
+  Logger.log('[getWorkAvailability] 重複除外後返却件数=' + result.length);
   if (result.length > 0) Logger.log('[getWorkAvailability] 先頭row=' + JSON.stringify(result[0]));
   return jsonResponse_(result);
+}
+
+function hasValidTime_(val) {
+  if (!val || val === '') return false;
+  var s = String(val).trim();
+  // 日付のみ（1899-12-30 など）は無効
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  return true;
 }
 
 function handleSaveWorkAvailability_(ss, data) {
@@ -1334,9 +1357,12 @@ function handleSaveWorkAvailability_(ss, data) {
   var staffIdCol = headers.indexOf('staff_id');
 
   // 既存行を (staff_id + '_' + date) → シート行番号 でマップ化
+  // date列がDate型の場合は yyyy-MM-dd に正規化してキーを作る
   var existMap = {};
   for (var i = 1; i < allData.length; i++) {
-    var key = String(allData[i][staffIdCol]) + '_' + String(allData[i][dateCol]);
+    var dv = allData[i][dateCol];
+    if (dv instanceof Date) dv = Utilities.formatDate(dv, 'Asia/Tokyo', 'yyyy-MM-dd');
+    var key = String(allData[i][staffIdCol]) + '_' + String(dv);
     existMap[key] = i + 1;
   }
 
