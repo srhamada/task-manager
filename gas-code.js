@@ -1333,12 +1333,10 @@ function handleGetWorkAvailability_(e) {
   return jsonResponse_(result);
 }
 
+// 「時間データが何かある」判定：空欄かどうかだけ見る
+// "1899-12-30"（時刻セルが日付で返ってきた値）も "09:30" と同様に「あり」とみなす
 function hasValidTime_(val) {
-  if (!val || val === '') return false;
-  var s = String(val).trim();
-  // 日付のみ（1899-12-30 など）は無効
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  return true;
+  return !!(val && String(val).trim() !== '');
 }
 
 function handleSaveWorkAvailability_(ss, data) {

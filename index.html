@@ -7996,11 +7996,11 @@
     window._waCache      = {};
   })();
 
+  // 「時間データが何かある」判定：空欄かどうかだけ見る
+  // "1899-12-30"（旧GASが時刻セルを日付で返した値）も "09:30" と同様に「あり」とみなし
+  // 空欄行 "" で時間入り行を上書きしないための比較に使う
   function waFrontHasTime_(val) {
-    if (!val || val === '') return false;
-    var s = String(val).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; // 日付のみは無効
-    return true;
+    return !!(val && String(val).trim() !== '');
   }
 
   var WA_STATUS_INFO = {
@@ -8092,6 +8092,10 @@
           }
         });
         console.log('[WA] mapキー一覧(' + Object.keys(map).length + '件):', Object.keys(map));
+        // 確認2: picked rows の中身（start_time/end_time が空か確認用）
+        console.log('[WA] picked rows:', Object.values(map).map(function(r) {
+          return { date: r.date, status: r.status, start_time: r.start_time, end_time: r.end_time, memo: r.memo, updated_at: r.updated_at };
+        }));
         window._waCache[staffId + '_' + month] = map;
         return map;
       })
@@ -8184,6 +8188,8 @@
       var fmtStart = formatTimeHHMM(rec.start_time);
       var fmtEnd   = formatTimeHHMM(rec.end_time);
       var timeHtml = (fmtStart || fmtEnd) ? '<div class="wa-cal-time">' + esc(fmtStart) + '〜' + esc(fmtEnd) + '</div>' : '';
+      // 確認3: カレンダー描画時の時間ログ（勤務可の日のみ）
+      if (rec.status && rec.status !== '休み') console.log('[WA calendar]', dateStr, { rawStart: rec.start_time, rawEnd: rec.end_time, fmtStart: fmtStart, fmtEnd: fmtEnd, timeHtml: timeHtml });
       var memoHtml = rec.memo ? '<div class="wa-cal-memo" title="' + esc(rec.memo) + '">' + esc(rec.memo) + '</div>' : '';
       html += '<div class="wa-cal-cell ' + (si.calCls||'') + (dateStr === today ? ' wa-today' : '') + '">' +
         '<div class="wa-cal-day' + dayCls + '">' + d + '</div>' +
