@@ -8104,21 +8104,27 @@
       var dateStr = y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2);
       var dow = new Date(y, m-1, d).getDay();
       var dayClass = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
-      var saved = map[dateStr];
-      var rec = saved || {};
-      // 未保存の日はデフォルト値を適用（保存済みデータは上書きしない）
-      var defStatus = '', defStart = '', defEnd = '';
-      if (!saved) {
+      var saved = map[dateStr];   // 保存済みデータ（なければ undefined）
+      var curStatus, curStart, curEnd, curMemo;
+      if (saved) {
+        // 保存済みデータを優先表示
+        curStatus = saved.status     || '';
+        curStart  = formatTimeHHMM(saved.start_time);
+        curEnd    = formatTimeHHMM(saved.end_time);
+        curMemo   = saved.memo       || '';
+      } else {
+        // 未保存日：曜日でデフォルト値を設定
+        curMemo = '';
         if (isNonBusinessDay(dateStr)) {
-          defStatus = '休み';
+          curStatus = '休み';
+          curStart  = '';
+          curEnd    = '';
         } else {
-          defStatus = '勤務可'; defStart = '09:30'; defEnd = '14:30';
+          curStatus = '勤務可';
+          curStart  = '09:30';
+          curEnd    = '14:30';
         }
       }
-      var curStatus = saved ? (rec.status||'') : defStatus;
-      var curStart  = formatTimeHHMM(saved ? rec.start_time : defStart);
-      var curEnd    = formatTimeHHMM(saved ? rec.end_time   : defEnd);
-      var curMemo   = rec.memo || '';
       var statusOptions = ['', '勤務可', '一部可', '休み', '未定'].map(function(s) {
         return '<option value="' + s + '"' + (s === curStatus ? ' selected' : '') + '>' + (s || '未設定') + '</option>';
       }).join('');
