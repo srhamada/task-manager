@@ -846,7 +846,7 @@
       <span class="nav-label">顧問料管理</span>
     </div>
     <div class="nav-item" onclick="showPage('work-avail', this)">
-      <span class="nav-icon">🕒</span>
+      <span class="nav-icon">🍉</span>
       <span class="nav-label">勤務予定共有</span>
     </div>
   </nav>
@@ -972,22 +972,17 @@
               <li style="color:#bbb;text-align:center;padding:4px 0;font-size:0.72rem;">読み込み中…</li>
             </ul>
           </div>
-          <!-- 算定年更管理 -->
-          <div onclick="showPageByName('busy-season')" class="busy-season-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0;">
-            <div class="busy-season-title">📊 算定年更管理</div>
-            <div class="busy-season-body">今年の算定年更はこちら☆</div>
+          <!-- 本日の勤務予定 -->
+          <div onclick="showPageByName('work-avail')" class="busy-season-card" style="background:linear-gradient(135deg,#e8faf3 0%,#d0f0e4 100%);border-left-color:#52c78a;">
+            <div class="busy-season-title" style="color:#1b5e3a;">🍉 本日の勤務予定</div>
+            <div id="work-avail-today-content" class="busy-season-body" style="white-space:normal;line-height:1.5;min-height:28px;">
+              <span style="color:#9e9e9e;font-size:0.75rem;">読み込み中…</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 本日の勤務予定（新規追加カード） -->
-    <div class="card" style="padding:12px 16px;max-width:360px;margin-bottom:8px;">
-      <div class="section-title" style="font-size:0.78rem;margin-bottom:6px;cursor:pointer;" onclick="showPageByName('work-avail')">🕒 本日の勤務予定 <span style="font-size:0.7rem;color:var(--text-muted);font-weight:400;">（タップで編集）</span></div>
-      <div id="work-avail-today-content" style="font-size:0.83rem;color:var(--text);">
-        <span style="color:#bbb;font-size:0.78rem;">読み込み中…</span>
-      </div>
-    </div>
   </div>
 
   <!-- クライアント一覧 -->
@@ -2184,7 +2179,7 @@
   <!-- 勤務予定共有 -->
   <div class="page" id="page-work-avail">
     <div class="page-header">
-      <h1>🕒 勤務予定共有</h1>
+      <h1>🍉 勤務予定共有</h1>
       <p>勤務できそうな時間を入力・共有できます</p>
     </div>
     <div class="card">
@@ -8214,7 +8209,7 @@
     var map    = window._waCache[cacheKey] || {};
     var rec    = map[today];
     if (!rec || !rec.status) {
-      content.innerHTML = '<span style="color:#bbb;font-size:0.78rem;">未登録</span>';
+      content.innerHTML = '<span style="color:#9e9e9e;font-size:0.75rem;">今日は登録なし</span>';
       return;
     }
     var si = WA_STATUS_INFO[rec.status] || {};
