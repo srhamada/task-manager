@@ -8010,15 +8010,15 @@
 
   function formatTimeHHMM(val) {
     if (val === null || val === undefined || val === '') return '';
-    var s = String(val);
+    var s = String(val).trim();
+    // "HH:mm" — そのまま返す
     if (/^\d{2}:\d{2}$/.test(s)) return s;
-    if (s.indexOf('T') !== -1) {
-      var d = new Date(s);
-      if (!isNaN(d.getTime())) {
-        var jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-        return ('0' + jst.getUTCHours()).slice(-2) + ':' + ('0' + jst.getUTCMinutes()).slice(-2);
-      }
-    }
+    // "HH:mm:ss..." — 先頭5文字を返す
+    if (/^\d{2}:\d{2}:/.test(s)) return s.substring(0, 5);
+    // ISO "...T09:30..." や "1899-12-30 09:30..." — 文字列から直接 HH:mm を取り出す
+    var m = s.match(/[T ](\d{2}):(\d{2})/);
+    if (m) return m[1] + ':' + m[2];
+    // 日付のみ "YYYY-MM-DD" — 時刻情報なし
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
     return s;
   }
@@ -8158,7 +8158,7 @@
       var badge = rec.status ? '<span class="wa-cal-status ' + (si.cls||'') + '">' + (si.label||rec.status) + '</span>' : '';
       var fmtStart = formatTimeHHMM(rec.start_time);
       var fmtEnd   = formatTimeHHMM(rec.end_time);
-      var timeHtml = (fmtStart || fmtEnd) ? '<div class="wa-cal-time">' + esc(fmtStart) + (fmtEnd ? '〜' + esc(fmtEnd) : '') + '</div>' : '';
+      var timeHtml = (fmtStart || fmtEnd) ? '<div class="wa-cal-time">' + esc(fmtStart) + '〜' + esc(fmtEnd) + '</div>' : '';
       var memoHtml = rec.memo ? '<div class="wa-cal-memo" title="' + esc(rec.memo) + '">' + esc(rec.memo) + '</div>' : '';
       html += '<div class="wa-cal-cell ' + (si.calCls||'') + (dateStr === today ? ' wa-today' : '') + '">' +
         '<div class="wa-cal-day' + dayCls + '">' + d + '</div>' +
@@ -8254,7 +8254,7 @@
     var badge = '<span class="wa-cal-status ' + (si.cls||'') + '">' + (si.label||rec.status) + '</span>';
     var fmtStart = formatTimeHHMM(rec.start_time);
     var fmtEnd   = formatTimeHHMM(rec.end_time);
-    var times = (fmtStart || fmtEnd) ? '<div style="font-size:0.85rem;margin-top:3px;">' + esc(fmtStart) + (fmtEnd ? '〜' + esc(fmtEnd) : '') + '</div>' : '';
+    var times = (fmtStart || fmtEnd) ? '<div style="font-size:0.85rem;margin-top:3px;">' + esc(fmtStart) + '〜' + esc(fmtEnd) + '</div>' : '';
     var memo  = rec.memo ? '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">メモ：' + esc(rec.memo) + '</div>' : '';
     content.innerHTML = badge + times + memo;
   }
