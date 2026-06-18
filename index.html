@@ -763,10 +763,22 @@
     .wa-cal-status{font-size:0.73rem;font-weight:600;padding:1px 6px;border-radius:10px;display:inline-block;margin-bottom:2px;}
     .wa-cal-time{font-size:0.72rem;color:var(--text-sub);}
     .wa-cal-memo{font-size:0.70rem;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .wa-cal-cell.status-ok  {background:#e8faf3;}
-    .wa-cal-cell.status-part{background:#fffde7;}
-    .wa-cal-cell.status-off {background:#f5f5f5;}
-    .wa-cal-cell.status-tbd {background:#f8f0fc;}
+    .wa-cal-cell.status-ok          {background:#e8faf3;}
+    .wa-cal-cell.status-ok-memo     {background:#fffde7;}
+    .wa-cal-cell.status-part        {background:#fffde7;}
+    .wa-cal-cell.status-off         {background:#f5f5f5;}
+    .wa-cal-cell.status-off-weekday {background:#fde8ee;}
+    .wa-cal-cell.status-tbd         {background:#f8f0fc;}
+    .wa-status-ok-memo     {background:#fff3cd;color:#7a6000;}
+    .wa-status-off-weekday {background:#fde8ee;color:#b02040;}
+    /* 凡例 */
+    .wa-cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:0.77rem;align-items:center;}
+    .wa-legend-item{display:flex;align-items:center;gap:4px;color:var(--text-sub);}
+    .wa-legend-dot{width:13px;height:13px;border-radius:3px;display:inline-block;flex-shrink:0;}
+    .wa-legend-dot.lg-ok          {background:#e8faf3;border:1px solid #aaddcc;}
+    .wa-legend-dot.lg-ok-memo     {background:#fffde7;border:1px solid #e8c840;}
+    .wa-legend-dot.lg-off-weekday {background:#fde8ee;border:1px solid #f0a8b8;}
+    .wa-legend-dot.lg-off         {background:#f5f5f5;border:1px solid #ddd;}
     /* 勤務予定保存トースト通知 */
     #wa-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;padding:10px 24px;border-radius:24px;font-size:0.9rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.15);pointer-events:none;opacity:0;transition:opacity 0.3s;}
     #wa-toast.wa-toast-ok {background:#e8faf3;color:#1b7a5a;border:1px solid #52c78a;}
@@ -2227,6 +2239,12 @@
           <button onclick="changeWorkAvailCalMonth(1)" class="btn btn-secondary" style="padding:5px 12px;font-size:0.9rem;">▶</button>
         </div>
         <div class="wa-calendar">
+          <div class="wa-cal-legend">
+            <span class="wa-legend-item"><span class="wa-legend-dot lg-ok"></span>勤務可</span>
+            <span class="wa-legend-item"><span class="wa-legend-dot lg-ok-memo"></span>備考あり</span>
+            <span class="wa-legend-item"><span class="wa-legend-dot lg-off-weekday"></span>平日休み</span>
+            <span class="wa-legend-item"><span class="wa-legend-dot lg-off"></span>休み</span>
+          </div>
           <div class="wa-cal-header">
             <div class="wa-cal-header-cell sun">日</div>
             <div class="wa-cal-header-cell">月</div>
@@ -8184,14 +8202,29 @@
       var rec = map[dateStr] || {};
       var si = WA_STATUS_INFO[rec.status] || {};
       var dayCls = dow === 0 ? ' sun' : (dow === 6 ? ' sat' : '');
-      var badge = rec.status ? '<span class="wa-cal-status ' + (si.cls||'') + '">' + (si.label||rec.status) + '</span>' : '';
+      var isWeekday = (dow >= 1 && dow <= 5);
+      var hasMemo   = !!(rec.memo && String(rec.memo).trim());
+
+      // 優先順位：① 勤務可+メモ → ② 平日休み → ③ 通常ステータス
+      var calCls, badgeCls;
+      if (rec.status === '勤務可' && hasMemo) {
+        calCls   = 'status-ok-memo';
+        badgeCls = 'wa-status-ok-memo';
+      } else if (rec.status === '休み' && isWeekday) {
+        calCls   = 'status-off-weekday';
+        badgeCls = 'wa-status-off-weekday';
+      } else {
+        calCls   = si.calCls || '';
+        badgeCls = si.cls    || '';
+      }
+
+      var badge = rec.status ? '<span class="wa-cal-status ' + badgeCls + '">' + (si.label || rec.status) + '</span>' : '';
       var fmtStart = formatTimeHHMM(rec.start_time);
       var fmtEnd   = formatTimeHHMM(rec.end_time);
       var timeHtml = (fmtStart || fmtEnd) ? '<div class="wa-cal-time">' + esc(fmtStart) + '〜' + esc(fmtEnd) + '</div>' : '';
-      // 確認3: カレンダー描画時の時間ログ（勤務可の日のみ）
       if (rec.status && rec.status !== '休み') console.log('[WA calendar JSON]', JSON.stringify({ date: dateStr, rawStart: rec.start_time, rawEnd: rec.end_time, fmtStart: fmtStart, fmtEnd: fmtEnd, hasTimeHtml: timeHtml !== '' }));
       var memoHtml = rec.memo ? '<div class="wa-cal-memo" title="' + esc(rec.memo) + '">' + esc(rec.memo) + '</div>' : '';
-      html += '<div class="wa-cal-cell ' + (si.calCls||'') + (dateStr === today ? ' wa-today' : '') + '">' +
+      html += '<div class="wa-cal-cell ' + calCls + (dateStr === today ? ' wa-today' : '') + '">' +
         '<div class="wa-cal-day' + dayCls + '">' + d + '</div>' +
         badge + timeHtml + memoHtml + '</div>';
     }
