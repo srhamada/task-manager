@@ -3,25 +3,41 @@ export const config = { runtime: 'edge' };
 
 const GAS_BASE = 'https://script.google.com/macros/s/AKfycbyrNp04DqrGf1rahuiNNSyRjorfcstjWcDQa2GXU4nMvfF1QJcW8ucYjWhfx4_WlLOT/exec';
 
-// GASへのfetch（リダイレクトを手動追跡してPOSTボディを保持する）
-async function fetchGas(url, method, body, contentType, hops) {
+/**
+ * GASへのfetch（リダイレクトを手動追跡）
+ *
+ * GAS Web Appの動作：
+ *   1. POST受信 → doPost(e)実行 → スプレッドシート書き込み完了
+ *   2. GASが302を返す（script.googleusercontent.com/macros/echo?... への応答配信用リダイレクト）
+ *   3. リダイレクト先はGASスクリプトを再実行しない（事前生成済みJSONを返すだけ）
+ *   → doPostは302を返す前に完了しているため、302→GETへの変換は保存済みの応答取得のみ
+ */
+async function fetchGas(url, method, body, contentType, hops, logs) {
   const opts = { method, redirect: 'manual' };
   if (body !== null && body !== undefined) {
     opts.body = body;
     opts.headers = { 'Content-Type': contentType || 'text/plain;charset=utf-8' };
   }
+
+  logs.push(`[${hops}] ${method} ${url.replace(GAS_BASE, 'GAS_BASE').slice(0, 80)}`);
   const r = await fetch(url, opts);
+  logs.push(`[${hops}] status=${r.status}`);
+
   const isRedirect = r.status >= 301 && r.status <= 308;
   if (isRedirect && hops < 5) {
     const loc = r.headers.get('location');
-    if (!loc) return r;
+    if (!loc) {
+      logs.push(`[${hops}] redirect但しLocationなし → そのまま返す`);
+      return r;
+    }
     // 307/308はPOSTを維持、301/302/303はGETへ変換（RFC標準）
+    // ※GASは302でdoPost応答を返す。302後GETになるのは「応答取得」であり保存処理は既に完了済み
     const keepPost = r.status === 307 || r.status === 308;
-    const nextMethod   = keepPost ? method : 'GET';
-    const nextBody     = nextMethod === 'POST' ? body : null;
-    const nextCt       = nextMethod === 'POST' ? contentType : null;
-    console.log(`[api/gas] redirect ${r.status} ${method}->${nextMethod} hops=${hops}`);
-    return fetchGas(loc, nextMethod, nextBody, nextCt, hops + 1);
+    const nextMethod = keepPost ? method : 'GET';
+    const nextBody   = nextMethod === 'POST' ? body : null;
+    const nextCt     = nextMethod === 'POST' ? contentType : null;
+    logs.push(`[${hops}] redirect ${r.status}: ${method} → ${nextMethod} (GASはdoPost完了後に302を返すため保存は完了済み)`);
+    return fetchGas(loc, nextMethod, nextBody, nextCt, hops + 1, logs);
   }
   return r;
 }
@@ -40,8 +56,9 @@ export default async function handler(req) {
   const url = new URL(req.url);
   const params = url.searchParams.toString();
   const targetUrl = params ? `${GAS_BASE}?${params}` : GAS_BASE;
+  const logs = [];
 
-  console.log(`[api/gas] ${req.method} ${params || '(no params)'}`);
+  logs.push(`[api/gas] 受信: ${req.method} params=${params || '(none)'}`);
 
   try {
     let body = null;
@@ -50,20 +67,43 @@ export default async function handler(req) {
     if (req.method === 'POST') {
       body = await req.text();
       contentType = req.headers.get('content-type') || 'text/plain;charset=utf-8';
-      console.log(`[api/gas] POST ct:${contentType} bodyLen:${body.length} body0:${body.slice(0, 120)}`);
+      logs.push(`[api/gas] POST bodyLen=${body.length} ct=${contentType}`);
+      logs.push(`[api/gas] POST body先頭: ${body.slice(0, 150)}`);
+
+      if (body.length === 0) {
+        console.error('[api/gas] ❌ POSTボディが空です。フロント側の送信を確認してください。');
+        return new Response(JSON.stringify({ error: 'POSTボディが空です' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      }
     }
 
-    const gasRes = await fetchGas(targetUrl, req.method, body, contentType, 0);
-    const text = await gasRes.text();
+    logs.push(`[api/gas] → GASへ転送: ${req.method} ${targetUrl.replace(GAS_BASE, 'GAS_BASE')}`);
+    const gasRes = await fetchGas(targetUrl, req.method, body, contentType, 0, logs);
 
-    console.log(`[api/gas] done status:${gasRes.status} resLen:${text.length} res0:${text.slice(0, 120)}`);
+    const text = await gasRes.text();
+    logs.push(`[api/gas] 最終 status=${gasRes.status} resLen=${text.length}`);
+    logs.push(`[api/gas] 最終 response先頭: ${text.slice(0, 150)}`);
+
+    // successフラグをログに出す
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.success !== 'undefined') {
+        logs.push(`[api/gas] success=${parsed.success}${parsed.error ? ' error=' + parsed.error : ''}${parsed.sheetName ? ' sheetName=' + parsed.sheetName : ''}${parsed.writtenRow ? ' writtenRow=' + parsed.writtenRow : ''}`);
+      }
+    } catch (_) { /* レスポンスがJSONでない場合は無視 */ }
+
+    // まとめてログ出力
+    console.log(logs.join('\n'));
 
     return new Response(text || '{}', {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
     });
   } catch (e) {
-    console.error(`[api/gas] ERROR: ${e.name} ${e.message}`);
+    logs.push(`[api/gas] ❌ ERROR: ${e.name} ${e.message}`);
+    console.error(logs.join('\n'));
     return new Response(JSON.stringify({ error: 'GAS接続失敗: ' + (e.message || String(e)) }), {
       status: 502,
       headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
