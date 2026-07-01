@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/gas.js": {
+      "memory": 128,
+      "maxDuration": 30
+    }
+  }
+}

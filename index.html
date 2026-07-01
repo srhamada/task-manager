@@ -871,6 +871,10 @@
 </aside>
 
 <!-- ===== メインコンテンツ ===== -->
+<div id="global-fetch-error" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#c62828;color:#fff;padding:10px 16px;font-size:0.9rem;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.3);">
+  <strong>⚠ 通信エラー：</strong><span id="global-fetch-error-msg"></span>
+  <button onclick="document.getElementById('global-fetch-error').style.display='none'" style="margin-left:12px;background:transparent;border:1px solid #fff;color:#fff;padding:2px 8px;cursor:pointer;border-radius:3px;">✕</button>
+</div>
 <main class="main">
 
   <!-- ダッシュボード -->
@@ -2434,8 +2438,9 @@
         return activityCache;
       })
       .catch(function(e) {
-        console.error('[fetchActivityLog] 失敗:', e);
-        return [];
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchActivityLog] 失敗 URL:', GAS_URL + '?action=getActivityLog', 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -2533,8 +2538,16 @@
     }).join('');
   }
 
+  function showGlobalError(msg) {
+    var banner = document.getElementById('global-fetch-error');
+    var msgEl  = document.getElementById('global-fetch-error-msg');
+    if (!banner || !msgEl) { console.error('[showGlobalError]', msg); return; }
+    msgEl.textContent = msg;
+    banner.style.display = 'block';
+  }
+
   // ===== TODO / Google Sheets連携 =====
-  var GAS_URL = 'https://script.google.com/macros/s/AKfycbyrNp04DqrGf1rahuiNNSyRjorfcstjWcDQa2GXU4nMvfF1QJcW8ucYjWhfx4_WlLOT/exec';
+  var GAS_URL = '/api/gas';
   var tasksCache = [];  // スプレッドシートから取得したタスクのキャッシュ
   var currentFilter = '';  // '' = すべて, 'hamada' or 'takasaki'
 
@@ -2722,8 +2735,9 @@
         return tasksCache;
       })
       .catch(function(e) {
-        console.error('[fetchTasksFromSheet] 失敗:', e);
-        return [];
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchTasksFromSheet] 失敗 URL:', GAS_URL, 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -2737,7 +2751,7 @@
       })
       .then(function(rows) {
         if (!Array.isArray(rows)) {
-          if (rows && rows.error) { console.error('[fetchConsultTodos] エラー:', rows.error); return []; }
+          if (rows && rows.error) { throw new Error('[fetchConsultTodos] GASエラー: ' + rows.error); }
           rows = [];
         }
         console.log('[fetchConsultTodos] 取得件数: ' + rows.length);
@@ -2779,14 +2793,15 @@
         return consultTodosCache;
       })
       .catch(function(e) {
-        console.error('[fetchConsultTodos] 失敗:', e);
-        return [];
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchConsultTodos] 失敗 URL:', GAS_URL + '?action=getConsultTodos', 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
   // データ再取得して画面更新
   function refreshFromSheet() {
-    return Promise.all([
+    return Promise.allSettled([
       fetchTasksFromSheet(),
       fetchConsultTodosFromSheet(),
       fetchRecordsFromSheet(),
@@ -2797,7 +2812,16 @@
       fetchHolidayMaster(),
       fetchMemberStatuses(),
       fetchQuickMessages()
-    ]).then(function() {
+    ]).then(function(results) {
+      var SHEET_NAMES = ['TODOシート', '相談記録TODO', '記録', '給与計算記録', 'クライアント', '行政問い合わせ記録', 'アクティビティ', '休日マスタ', '担当者状態', 'メッセージ'];
+      var failedInfo = results.map(function(r, i) { return r.status === 'rejected' ? SHEET_NAMES[i] : null; }).filter(Boolean);
+      if (failedInfo.length > 0) {
+        console.error('[refreshFromSheet] 取得失敗:', failedInfo);
+        showGlobalError('再取得に失敗しました（' + failedInfo.join('、') + '）。GAS通信またはデプロイ状況を確認してください。');
+      } else {
+        var banner = document.getElementById('global-fetch-error');
+        if (banner) banner.style.display = 'none';
+      }
       renderTasks();
       updateAllStats();
       renderDoneList();
@@ -2924,7 +2948,9 @@
         return memberStatusCache;
       })
       .catch(function(e) {
-        console.error('[fetchMemberStatuses] 失敗:', e);
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchMemberStatuses] 失敗 URL:', GAS_URL + '?action=getMemberStatuses', 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -3777,8 +3803,9 @@
         return recordsCache;
       })
       .catch(function(e) {
-        console.error('[fetchRecordsFromSheet] 失敗:', e);
-        return [];
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchRecordsFromSheet] 失敗 URL:', GAS_URL, 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -3828,8 +3855,9 @@
         return payrollRecordsCache;
       })
       .catch(function(e) {
-        console.error('[fetchPayrollRecordsFromSheet] 失敗:', e);
-        return [];
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchPayrollRecordsFromSheet] 失敗 URL:', GAS_URL, 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -4241,9 +4269,9 @@
         return clientsCache;
       })
       .catch(function(e) {
-        console.error('[fetchClientsFromSheet] 失敗:', e);
-        // フォールバック: localStorageから読む
-        return loadClients();
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchClientsFromSheet] 失敗 URL:', GAS_URL, 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -4339,8 +4367,9 @@
         return inquiriesCache;
       })
       .catch(function(e) {
-        console.error('[fetchInquiriesFromSheet] 失敗:', e);
-        return loadInquiries();
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchInquiriesFromSheet] 失敗 URL:', GAS_URL, 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -5488,8 +5517,9 @@
         return holidayMasterCache;
       })
       .catch(function(e) {
-        console.error('[fetchHolidayMaster] 失敗:', e);
-        return [];
+        var msg = e && e.message ? e.message : String(e);
+        console.error('[fetchHolidayMaster] 失敗 URL:', GAS_URL + '?action=getHolidayMaster', 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
+        throw e;
       });
   }
 
@@ -7966,7 +7996,7 @@
   })();
   // スプレッドシートからデータを取得して初期表示
   // ※ タスクの描画とカード統計はfetchTasksFromSheet内で即座に実行される
-  Promise.all([
+  Promise.allSettled([
     fetchTasksFromSheet(),
     fetchConsultTodosFromSheet(),
     fetchRecordsFromSheet(),
@@ -7976,10 +8006,21 @@
     fetchActivityLog(),
     fetchHolidayMaster(),
     fetchMemberStatuses()
-  ]).then(function() {
-    console.log('[初期化] Promise.all 完了（全シート取得済み）');
-    console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');
-    // 全データ取得完了後に一括描画（TODO + 相談記録TODOのマージ後）
+  ]).then(function(results) {
+    var SHEET_NAMES = ['TODOシート', '相談記録TODO', '記録', '給与計算記録', 'クライアント', '行政問い合わせ記録', 'アクティビティ', '休日マスタ', '担当者状態'];
+    var successCount = results.filter(function(r) { return r.status === 'fulfilled'; }).length;
+    var failedInfo = results.map(function(r, i) { return r.status === 'rejected' ? SHEET_NAMES[i] : null; }).filter(Boolean);
+    if (failedInfo.length === 0) {
+      console.log('[初期化] 全シート取得済み（' + successCount + '/' + results.length + '）');
+      console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');
+    } else if (failedInfo.length === results.length) {
+      console.error('[初期化] 全シート取得失敗（0/' + results.length + '）失敗:', failedInfo);
+      showGlobalError('スプレッドシートのデータをすべて取得できませんでした。GAS通信またはデプロイ状況を確認してください。');
+    } else {
+      console.error('[初期化] 一部取得失敗（' + successCount + '/' + results.length + '成功）失敗シート:', failedInfo);
+      showGlobalError('スプレッドシートから一部のデータを取得できませんでした（失敗: ' + failedInfo.join('、') + '）。GAS通信またはデプロイ状況を確認してください。');
+    }
+    // 取得できたデータで描画
     try { renderTasks(); } catch(e) { console.error('[初期化] renderTasks エラー:', e); }
     try { updateAllStats(); } catch(e) { console.error('[初期化] updateAllStats エラー:', e); }
     try { renderDoneList(); } catch(e) { console.error('[初期化] renderDoneList エラー:', e); }
@@ -8002,8 +8043,6 @@
         toEl.value = defaultTo;
       }
     } catch(e) {}
-  }).catch(function(e) {
-    console.error('[初期化] データ取得でエラー:', e);
   });
 
   // ===== 勤務予定共有 =====
