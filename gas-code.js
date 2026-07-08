@@ -61,7 +61,7 @@ function doGet(e) {
   if (action === 'getConsultTodos')       return handleGetConsultTodos_();
   if (action === 'getBusySeasonRecords')  return handleGetBusySeasonRecords_(e);
   if (action === 'getStressCheckRecords') return handleGetStressCheckRecords_();
-  if (action === 'getActivityLog')        return handleGetActivityLog_();
+  if (action === 'getActivityLog')        return handleGetActivityLog_(e);
   if (action === 'getHolidayMaster')      return handleGetHolidayMaster_();
   if (action === 'getMemberStatuses')     return handleGetMemberStatuses_();
   if (action === 'getMessages')           return handleGetMessages_();
@@ -622,21 +622,37 @@ function handleLogActivity_(ss, data) {
 }
 
 // ログ取得（直近20件、新しい順）
-function handleGetActivityLog_() {
+function handleGetActivityLog_(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_ACTIVITY);
   if (!sheet) {
     return ContentService.createTextOutput(JSON.stringify([]))
       .setMimeType(ContentService.MimeType.JSON);
   }
-  var data = sheet.getDataRange().getValues();
-  var headers = data[0];
+  // limit（既定20・上限200）。全件は読まず、末尾 limit 行だけ取得して負荷を抑える。
+  var limit = 20;
+  if (e && e.parameter && e.parameter.limit) {
+    var n = parseInt(e.parameter.limit, 10);
+    if (!isNaN(n) && n > 0) limit = Math.min(n, 200);
+  }
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) {
+    return ContentService.createTextOutput(JSON.stringify([]))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  // データ行は 2 〜 lastRow。末尾 limit 行だけ読む。
+  var dataRows = lastRow - 1;
+  var take = Math.min(limit, dataRows);
+  var startRow = lastRow - take + 1;
+  var values = sheet.getRange(startRow, 1, take, lastCol).getValues();
   var result = [];
-  // 末尾（最新）から20件取得
-  for (var i = data.length - 1; i >= 1 && result.length < 20; i--) {
+  // 新しい順（末尾から先頭へ）
+  for (var i = values.length - 1; i >= 0; i--) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
-      obj[headers[j]] = data[i][j];
+      obj[headers[j]] = values[i][j];
     }
     result.push(obj);
   }
@@ -1417,4 +1433,288 @@ function handleSaveWorkAvailability_(ss, data) {
 
   Logger.log('[saveWorkAvailability] 完了 count=' + count);
   return jsonResponse_({ success: true, count: count });
+}
+
+// ============================================================
+// メンテナンス: 実タブ名の確認用ヘルパー
+// ------------------------------------------------------------
+// このツールのコード上は完了データ専用タブ（TODO（完了）/記録（完了））は
+// 存在せず、実体は「TODO」「記録」シート内に完了行が混在している。
+// 本削除の前に、まずこの関数を実行して実際のタブ名を確認すること。
+// ============================================================
+function maintenanceListSheetNames_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const names = ss.getSheets().map(s => s.getName());
+  console.log('========== 現在のタブ名一覧 ==========');
+  names.forEach((n, i) => console.log(`${i + 1}. ${n}`));
+  return names;
+}
+
+// ============================================================
+// メンテナンス: 古い履歴・完了データ行の削除
+// ------------------------------------------------------------
+// スプレッドシートが重くなるのを防ぐため、指定日(2026/06/30)以前の
+// 「古い完了済み・履歴系データ」だけを行ごと削除する。
+// 未完了TODOや現在使用中の記録は削除しない。
+//
+// 【重要 / 完了判定について】
+//   実タブ名がコード定義（SHEET_TODO='TODO' / SHEET_RECORD='記録'）の場合、
+//   完了データと未完了データが同じシートに混在している。そのため：
+//     - TODO系シート: 状態=「完了」または記録済フラグがある行のみ削除対象
+//     - 記録系シート: 完了区分(状態)列がある場合は「完了」行のみ削除対象
+//     - 給与計算記録 / アクティビティログ: 全行が履歴のため日付条件のみで削除
+//   完了判定列が必須のシート(TODO系)で完了列が見つからない場合は、
+//   未完了誤削除を避けるためシートごとスキップする。
+//
+// 【使い方】
+//   0. 先に maintenanceListSheetNames_() を実行して実タブ名を確認
+//   1. DRY_RUN = true のまま実行し、ログで削除対象を確認
+//   2. 問題なければ DRY_RUN = false に変更して再実行（本削除）
+//   3. 削除後、アプリを再読み込みして空欄TODOが発生しないか確認
+//
+// 【安全対策】
+//   - 本削除の前に対象シートをバックアップコピー
+//   - 行番号ズレ防止のため必ず「下の行から」削除（deleteRows で一括）
+//   - 値クリアではなく deleteRows で行自体を削除（空行・書式残りを防ぐ）
+//   - 日付列・完了列はヘッダー名から自動判定
+// ============================================================
+function maintenanceDeleteOldRowsUntil20260630() {
+  const DRY_RUN = true; // 確認後 false に変更
+  const CUTOFF = new Date('2026-06-30T23:59:59+09:00');
+
+  // 対象シートの設定。
+  //   names          : 実タブ名の候補（先に見つかったものを使用。完了専用タブがあれば優先）
+  //   completionMode : 'required'  … 完了判定必須。完了列が無ければシートごとスキップ（TODO系）
+  //                    'ifPresent' … 完了列があれば完了行のみ、無ければ日付のみ（記録系）
+  //                    'none'      … 完了判定なし・日付条件のみ（純粋な履歴ログ）
+  const TARGET_CONFIGS = [
+    // --- 第1段階：判定列が明確な履歴ログのみ削除（全行が過去データ・日付条件のみ） ---
+    { names: ['給与計算記録'],               completionMode: 'none'      },
+    { names: ['アクティビティログ'],         completionMode: 'none'      }
+
+    // --- 第2段階：TODO / 記録 は実タブ名・完了列・削除方針を確認できるまで対象外 ---
+    //   ※ TODO は状態=「完了」または記録済フラグのある行のみ削除（未完了は絶対に削除しない）
+    //   ※ 記録 は「完了行のみ」か「古い記録全体か」を確認するまで本削除しない
+    //   確認後、下記コメントを解除して再度 DRY_RUN で件数を確認すること。
+    // , { names: ['TODO（完了）', 'TODO'],    completionMode: 'required'  }
+    // , { names: ['記録（完了）', '記録'],     completionMode: 'ifPresent' }
+  ];
+
+  const DATE_HEADER_CANDIDATES = [
+    '日付', '期限', '完了日', '対応日', '作成日', '日時',
+    'createdAt', 'updatedAt', 'date', 'timestamp'
+  ];
+
+  // 完了状態を示す「状態/区分」列の候補
+  const STATUS_HEADER_CANDIDATES = ['状態', 'ステータス', '完了区分', '完了フラグ', 'status'];
+  // 値が入っていれば完了とみなす「フラグ」列の候補（記録済など）
+  const FLAG_HEADER_CANDIDATES = ['記録済', '完了日時'];
+  // 状態列がこれらの値なら「完了」とみなす
+  const COMPLETED_VALUES = ['完了', '済', '完了済', '対応済', 'done', 'true'];
+
+  const isCompletedStatus = (v) => {
+    if (v === true) return true;
+    const s = String(v).trim().toLowerCase();
+    if (!s) return false;
+    return COMPLETED_VALUES.indexOf(s) !== -1;
+  };
+
+  const findHeaderIndex = (headers, candidates) => {
+    for (const c of candidates) {
+      const idx = headers.indexOf(c);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  // 削除対象行の内容プレビュー（先頭最大6列）を作る
+  const buildPreview = (headers, row) => {
+    const obj = {};
+    const limit = Math.min(headers.length, 6);
+    for (let c = 0; c < limit; c++) {
+      const key = headers[c] || ('列' + (c + 1));
+      let v = row[c];
+      if (Object.prototype.toString.call(v) === '[object Date]') {
+        v = Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+      }
+      obj[key] = v;
+    }
+    return obj;
+  };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
+  const backupSuffix = Utilities.formatDate(new Date(), tz, 'yyyyMMdd_HHmmss');
+
+  TARGET_CONFIGS.forEach(config => {
+    // --- 実タブ名を解決（候補の先頭から存在するものを採用） ---
+    let sheet = null;
+    let sheetName = null;
+    for (const name of config.names) {
+      const s = ss.getSheetByName(name);
+      if (s) { sheet = s; sheetName = name; break; }
+    }
+    if (!sheet) {
+      console.warn(`[SKIP] シートが見つかりません: 候補=${JSON.stringify(config.names)}`);
+      return;
+    }
+
+    console.log(`========== ${sheetName} ==========`);
+
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+
+    if (lastRow <= 1) {
+      console.log(`[SKIP] データ行なし: ${sheetName}`);
+      return;
+    }
+
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+
+    // --- 日付列の判定 ---
+    const dateColIndex = findHeaderIndex(headers, DATE_HEADER_CANDIDATES);
+    if (dateColIndex === -1) {
+      console.warn(`[SKIP] 日付列が見つかりません: ${sheetName} / headers=${JSON.stringify(headers)}`);
+      return;
+    }
+
+    // --- 完了判定列の判定 ---
+    const statusColIndex = findHeaderIndex(headers, STATUS_HEADER_CANDIDATES);
+    const flagColIndex = findHeaderIndex(headers, FLAG_HEADER_CANDIDATES);
+    const hasCompletionCol = statusColIndex !== -1 || flagColIndex !== -1;
+
+    // 完了判定が必須のシートで完了列が無ければ、未完了誤削除を避けてスキップ
+    if (config.completionMode === 'required' && !hasCompletionCol) {
+      console.warn(`[SKIP] 完了判定列が見つからないため削除しません（未完了誤削除防止）: ${sheetName} / headers=${JSON.stringify(headers)}`);
+      return;
+    }
+
+    // このシートで完了フィルタを適用するか
+    const applyCompletionFilter =
+      config.completionMode === 'required' ||
+      (config.completionMode === 'ifPresent' && hasCompletionCol);
+
+    // ログ用：完了判定に使う列名
+    const completionColNames = [];
+    if (applyCompletionFilter) {
+      if (statusColIndex !== -1) completionColNames.push(headers[statusColIndex] + '(状態)');
+      if (flagColIndex !== -1)   completionColNames.push(headers[flagColIndex] + '(フラグ)');
+    }
+
+    const isRowCompleted = (row) => {
+      if (statusColIndex !== -1 && isCompletedStatus(row[statusColIndex])) return true;
+      if (flagColIndex !== -1) {
+        const fv = row[flagColIndex];
+        if (fv !== '' && fv !== null && fv !== undefined) return true;
+      }
+      return false;
+    };
+
+    const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    const rowsToDelete = [];
+    const previews = [];
+    let skippedIncomplete = 0; // 日付は該当するが未完了のためスキップした件数
+
+    values.forEach((row, i) => {
+      const actualRowNumber = i + 2;
+      const parsedDate = parseMaintenanceDate_(row[dateColIndex]);
+      if (!parsedDate) return;
+      if (parsedDate.getTime() > CUTOFF.getTime()) return;
+
+      // 日付条件は満たす。完了フィルタが有効なら未完了行を除外
+      if (applyCompletionFilter && !isRowCompleted(row)) {
+        skippedIncomplete++;
+        return;
+      }
+
+      rowsToDelete.push(actualRowNumber);
+      if (previews.length < 5) {
+        previews.push({ 行: actualRowNumber, 内容: buildPreview(headers, row) });
+      }
+    });
+
+    // --- DRY_RUN ログ出力 ---
+    console.log(`対象シート名: ${sheetName}`);
+    console.log(`判定に使った日付列: ${headers[dateColIndex]} (${dateColIndex + 1}列目)`);
+    console.log(`完了判定に使った列: ${applyCompletionFilter ? (completionColNames.join(', ') || '(なし)') : '(なし・日付条件のみ)'}`);
+    if (applyCompletionFilter) {
+      console.log(`未完了のため除外した件数: ${skippedIncomplete}`);
+    }
+    console.log(`削除対象件数: ${rowsToDelete.length}`);
+    console.log(`削除対象行: ${rowsToDelete.join(', ')}`);
+    console.log(`削除対象プレビュー(先頭最大5件): ${JSON.stringify(previews, null, 2)}`);
+
+    if (rowsToDelete.length === 0) {
+      console.log(`[SKIP] 削除対象なし: ${sheetName}`);
+      return;
+    }
+
+    if (DRY_RUN) {
+      console.log(`[DRY_RUN] ${sheetName}: 実削除は行いません`);
+      return;
+    }
+
+    // --- バックアップ作成 ---
+    const backupName = `${sheetName}_backup_${backupSuffix}`;
+    sheet.copyTo(ss).setName(backupName);
+    console.log(`[BACKUP] ${backupName} を作成しました`);
+
+    // --- 連続行はまとめて、必ず「下の行から」削除する ---
+    deleteRowsFromBottom_(sheet, rowsToDelete);
+
+    console.log(`[DONE] ${sheetName}: ${rowsToDelete.length} 行を削除しました`);
+  });
+}
+
+// 日付セルの値を Date に正規化する（Dateオブジェクト・各種文字列表記に対応）
+function parseMaintenanceDate_(value) {
+  if (!value) return null;
+
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return value;
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  // 2026/06/30, 2026-06-30, 2026.06.30, 2026年6月30日 などに対応
+  const normalized = text
+    .replace(/[年月]/g, '/')
+    .replace(/[日]/g, '')
+    .replace(/[.]/g, '/')
+    .replace(/-/g, '/');
+
+  const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (!match) return null;
+
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+
+  if (!y || !m || !d) return null;
+
+  return new Date(y, m - 1, d, 23, 59, 59);
+}
+
+// 行番号配列を「下から」連続範囲ごとにまとめて削除する
+function deleteRowsFromBottom_(sheet, rows) {
+  const sorted = [...rows].sort((a, b) => b - a);
+
+  let start = sorted[0];
+  let count = 1;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const current = sorted[i];
+    const previous = sorted[i - 1];
+
+    if (current === previous - 1) {
+      count++;
+    } else {
+      sheet.deleteRows(start - count + 1, count);
+      start = current;
+      count = 1;
+    }
+  }
+
+  sheet.deleteRows(start - count + 1, count);
 }

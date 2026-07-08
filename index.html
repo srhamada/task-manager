@@ -2329,7 +2329,7 @@
     if (name === 'busy-season')    initBusySeasonPage();
     if (name === 'stress-check')   { try { initStressCheckPage(); } catch(e) { console.error('[stress-check] 初期化エラー:', e); } }
     if (name === 'retainer')       { try { initRetainerPage(); } catch(e) { console.error('[retainer] 初期化エラー:', e); } }
-    if (name === 'dashboard')      { refreshFromSheet(); renderActivityList(); }
+    if (name === 'dashboard')      { renderActivityList(); refreshDashboardLight(); }
     if (name === 'work-avail')     initWorkAvailabilityPage();
   }
 
@@ -2424,8 +2424,8 @@
 
   // シートからアクティビティログを取得
   function fetchActivityLog() {
-    return fetch(GAS_URL + '?action=getActivityLog')
-      .then(function(res) { return res.json(); })
+    // 全件取得せず最新20件のみ（GAS側も limit を見て末尾20行だけ返す）
+    return gasGetJson(GAS_URL + '?action=getActivityLog&limit=20')
       .then(function(rows) {
         if (!Array.isArray(rows)) rows = [];
         activityCache = rows.map(function(row) {
@@ -2548,6 +2548,82 @@
 
   // ===== TODO / Google Sheets連携 =====
   var GAS_URL = '/api/gas';
+
+  // ===== GAS GET 共通ヘルパー =====
+  // 目的：初期表示や再取得でGASへ一斉アクセスして504になるのを防ぐ。
+  //  ・同時実行数を GAS_MAX_CONCURRENT 件に制限（キュー方式）→ 何件呼んでも同時にGASを叩くのは最大2件
+  //  ・HTTPステータスとContent-Typeを確認してからJSON.parse（HTMLエラーをJSONとして解釈しない）
+  //  ・504/502/503・ネットワークエラー・JSON以外の応答は1回だけ短い待機後に再試行（控えめ）
+  var GAS_MAX_CONCURRENT = 2;
+  var _gasActive = 0;
+  var _gasQueue = [];
+
+  function _gasPump() {
+    while (_gasActive < GAS_MAX_CONCURRENT && _gasQueue.length > 0) {
+      var run = _gasQueue.shift();
+      _gasActive++;
+      run();
+    }
+  }
+
+  function _gasDelay(ms) {
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
+  }
+
+  // 実際の取得（ステータス・content-type確認 + 1回リトライ）
+  function _gasFetchJson(url, isRetry) {
+    return fetch(url).then(function(res) {
+      return res.text().then(function(text) {
+        var ct   = (res.headers.get('content-type') || '').toLowerCase();
+        var body = (text || '').trim();
+        if (!res.ok) {
+          // 504/502/503 は1回だけ再試行（同時再試行で詰まらないよう控えめに）
+          if (!isRetry && (res.status === 504 || res.status === 502 || res.status === 503)) {
+            console.warn('[gasGetJson] HTTP ' + res.status + ' → 700ms後に1回だけ再試行:', url);
+            return _gasDelay(700).then(function() { return _gasFetchJson(url, true); });
+          }
+          throw new Error('HTTP ' + res.status + (body ? '：' + body.slice(0, 100) : ''));
+        }
+        if (!body) return null;
+        // JSON以外（GAS/Vercelが返すHTMLエラー "An error o..." 等）を JSON.parse しない
+        var looksJson = ct.indexOf('application/json') !== -1 || body.charAt(0) === '[' || body.charAt(0) === '{';
+        if (!looksJson) {
+          if (!isRetry) {
+            console.warn('[gasGetJson] JSON以外の応答 → 700ms後に1回だけ再試行:', body.slice(0, 60));
+            return _gasDelay(700).then(function() { return _gasFetchJson(url, true); });
+          }
+          throw new Error('サーバーからJSON以外の応答を受信しました：' + body.slice(0, 80));
+        }
+        try {
+          return JSON.parse(body);
+        } catch (e) {
+          throw new Error('応答のJSON解析に失敗しました：' + body.slice(0, 80));
+        }
+      });
+    }, function(netErr) {
+      // ネットワークエラーも1回だけ再試行
+      if (!isRetry) {
+        console.warn('[gasGetJson] ネットワークエラー → 700ms後に1回だけ再試行:', netErr && netErr.message);
+        return _gasDelay(700).then(function() { return _gasFetchJson(url, true); });
+      }
+      throw netErr;
+    });
+  }
+
+  // 同時実行数を制限してGETする（GET取得はすべてこの関数経由にする）
+  function gasGetJson(url) {
+    return new Promise(function(resolve, reject) {
+      _gasQueue.push(function() {
+        _gasFetchJson(url, false).then(function(v) {
+          _gasActive--; _gasPump(); resolve(v);
+        }, function(e) {
+          _gasActive--; _gasPump(); reject(e);
+        });
+      });
+      _gasPump();
+    });
+  }
+
   var tasksCache = [];  // スプレッドシートから取得したタスクのキャッシュ
   var currentFilter = '';  // '' = すべて, 'hamada' or 'takasaki'
 
@@ -2685,11 +2761,7 @@
   // GASからタスク一覧を取得してキャッシュに格納
   function fetchTasksFromSheet() {
     console.log('[fetchTasksFromSheet] 取得元: TODOシート');
-    return fetch(GAS_URL)
-      .then(function(res) {
-        if (!res.ok) throw new Error('データ取得に失敗しました（HTTP ' + res.status + '）');
-        return res.json();
-      })
+    return gasGetJson(GAS_URL)
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -2729,6 +2801,14 @@
           // text が空で category がある場合、category を text に
           if (!t.text && t.category) t.text = t.category;
           return t;
+        }).filter(function(t) {
+          // 空行・書式だけ残った行をTODOとして扱わない
+          // （クライアント・タスク内容・期限・業務種別がすべて空欄の行は除外）
+          var valid = t.client || t.text || t.due || t.category;
+          if (!valid) {
+            console.warn('[fetchTasksFromSheet] 空行を除外: id=' + t.id);
+          }
+          return valid;
         });
         console.log('[fetchTasksFromSheet] 正規化後1件目:', tasksCache.length > 0 ? JSON.stringify(tasksCache[0]) : '(なし)');
         // ※ renderTasks / updateAllStats は呼び出し元（Promise.all完了後）で実行
@@ -2744,11 +2824,7 @@
   // 相談記録TODO取得（O列=TRUE のみ）
   function fetchConsultTodosFromSheet() {
     console.log('[fetchConsultTodos] 取得開始');
-    return fetch(GAS_URL + '?action=getConsultTodos')
-      .then(function(res) {
-        if (!res.ok) throw new Error('相談記録TODO取得失敗（HTTP ' + res.status + '）');
-        return res.json();
-      })
+    return gasGetJson(GAS_URL + '?action=getConsultTodos')
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && rows.error) { throw new Error('[fetchConsultTodos] GASエラー: ' + rows.error); }
@@ -2833,6 +2909,28 @@
       renderActivityList();
       renderTodaySchedule();
     });
+  }
+
+  // ダッシュボードを開いたときの軽量リフレッシュ。
+  // 重い「記録 / 給与計算記録」は再取得せず（各ページで取得）、GASを同時に叩かないよう1件ずつ取得する。
+  function refreshDashboardLight() {
+    fetchTasksFromSheet()
+      .then(function() {
+        try { renderTasks(); } catch(e) {}
+        try { updateAllStats(); } catch(e) {}
+        try { renderTodaySchedule(); } catch(e) {}
+        clearInitFailure('TODO');
+      })
+      .catch(function(e) { console.error('[dashboard] TODO再取得失敗:', e); })
+      .then(function() { return fetchConsultTodosFromSheet().catch(function(){}); })
+      .then(function() {
+        try { renderTasks(); } catch(e) {}
+        try { updateAllStats(); } catch(e) {}
+      })
+      .then(function() { return fetchActivityLog().catch(function(){}); })
+      .then(function() { try { renderActivityList(); } catch(e) {} });
+    // 本日の勤務予定も最新化（上のチェーンとは独立、gasGetJsonが同時実行数を抑える）
+    try { loadTodayWorkAvail(); } catch(e) {}
   }
 
   function esc(str) {
@@ -2934,8 +3032,7 @@
 
   // --- 担当者状態の取得・更新・描画 ---
   function fetchMemberStatuses() {
-    return fetch(GAS_URL + '?action=getMemberStatuses')
-      .then(function(res) { return res.json(); })
+    return gasGetJson(GAS_URL + '?action=getMemberStatuses')
       .then(function(data) {
         if (data && typeof data === 'object') {
           memberStatusCache = {};
@@ -3765,11 +3862,7 @@
   function fetchRecordsFromSheet() {
     var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('記録');
     console.log('[fetchRecordsFromSheet] 取得開始:', url);
-    return fetch(url)
-      .then(function(res) {
-        if (!res.ok) throw new Error('記録データ取得失敗（HTTP ' + res.status + '）');
-        return res.json();
-      })
+    return gasGetJson(url)
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -3820,11 +3913,7 @@
   function fetchPayrollRecordsFromSheet() {
     var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('給与計算記録');
     console.log('[fetchPayrollRecordsFromSheet] 取得開始');
-    return fetch(url)
-      .then(function(res) {
-        if (!res.ok) throw new Error('給与計算記録取得失敗（HTTP ' + res.status + '）');
-        return res.json();
-      })
+    return gasGetJson(url)
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -4229,11 +4318,7 @@
   function fetchClientsFromSheet() {
     var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('クライアント');
     console.log('[fetchClientsFromSheet] 取得開始');
-    return fetch(url)
-      .then(function(res) {
-        if (!res.ok) throw new Error('クライアントデータ取得失敗（HTTP ' + res.status + '）');
-        return res.json();
-      })
+    return gasGetJson(url)
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -4328,11 +4413,7 @@
   function fetchInquiriesFromSheet() {
     var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('行政問い合わせ記録');
     console.log('[fetchInquiriesFromSheet] 取得開始');
-    return fetch(url)
-      .then(function(res) {
-        if (!res.ok) throw new Error('行政問い合わせデータ取得失敗（HTTP ' + res.status + '）');
-        return res.json();
-      })
+    return gasGetJson(url)
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -4863,7 +4944,15 @@
     if (dateEl && !dateEl.value) {
       dateEl.value = todayJST();
     }
+    // まずキャッシュで即描画 → ページを開いたタイミングで最新を取得（遅延読み込み）
     renderInquiryList();
+    fetchInquiriesFromSheet()
+      .then(function() {
+        try { renderInquiryList(); } catch(e) {}
+        try { updateInquiryStat(); } catch(e) {}
+        clearInitFailure('行政問い合わせ記録');
+      })
+      .catch(function(e) { console.error('[inquiry] 取得失敗:', e); });
   }
 
   function setInquiryFilter(filter, tabEl) {
@@ -5441,6 +5530,16 @@
   var calYear  = new Date().getFullYear();
   var calMonth = new Date().getMonth(); // 0-indexed
   var holidayMasterCache = []; // 休日マスタキャッシュ
+  var HOLIDAY_CACHE_KEY = 'holidayMasterCache';
+
+  // 起動時：localStorageの祝日キャッシュを即座に読み込む（GAS取得を待たずカレンダー表示できるように）
+  function loadHolidayCacheFromLocal() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(HOLIDAY_CACHE_KEY) || '[]');
+      if (Array.isArray(saved) && saved.length) holidayMasterCache = saved;
+    } catch (e) { /* 破損時は無視 */ }
+    return holidayMasterCache;
+  }
 
   // --- 営業日判定ユーティリティ ---
   // dateStr: 'yyyy-MM-dd' 形式
@@ -5492,10 +5591,9 @@
     office_holiday: '#9e9e9e'  // グレー：事務所休日
   };
 
-  // 休日マスタ取得
+  // 休日マスタ取得（内容が頻繁に変わらないためlocalStorageにキャッシュ。失敗しても致命扱いにしない）
   function fetchHolidayMaster() {
-    return fetch(GAS_URL + '?action=getHolidayMaster')
-      .then(function(res) { return res.json(); })
+    return gasGetJson(GAS_URL + '?action=getHolidayMaster')
       .then(function(rows) {
         if (!Array.isArray(rows)) rows = [];
         holidayMasterCache = rows.map(function(r) {
@@ -5514,12 +5612,15 @@
             name: String(r['名称'] || '')
           };
         });
+        // localStorageにキャッシュ（次回起動時に即時利用）
+        try { localStorage.setItem(HOLIDAY_CACHE_KEY, JSON.stringify(holidayMasterCache)); } catch (e) {}
         return holidayMasterCache;
       })
       .catch(function(e) {
         var msg = e && e.message ? e.message : String(e);
-        console.error('[fetchHolidayMaster] 失敗 URL:', GAS_URL + '?action=getHolidayMaster', 'origin:', location.origin, 'error:', msg, '→ CORS/GASデプロイ/ネットワークの可能性あり');
-        throw e;
+        // 祝日取得失敗はアプリ全体の初期化失敗にしない（キャッシュ or 土日判定で継続）
+        console.warn('[fetchHolidayMaster] 取得失敗（キャッシュで継続）:', msg);
+        return holidayMasterCache;
       });
   }
 
@@ -6278,7 +6379,12 @@
         tsClient.appendChild(opt);
       });
     }
+    // まずキャッシュで即描画 → 記録・給与計算記録を取得して再描画（1件ずつ・遅延読み込み）
     renderTimeSummary();
+    fetchRecordsFromSheet()
+      .catch(function(e) { console.error('[timesummary] 記録取得失敗:', e); })
+      .then(function() { return fetchPayrollRecordsFromSheet().catch(function(e) { console.error('[timesummary] 給与計算記録取得失敗:', e); }); })
+      .then(function() { try { renderTimeSummary(); } catch(e) {} });
   }
 
   // 記録シート＋給与計算記録シートを統合して時間集計用データを返す
@@ -7994,56 +8100,141 @@
     var d = document.getElementById('rec-date');
     if (d && !d.value) d.value = todayJST();
   })();
-  // スプレッドシートからデータを取得して初期表示
-  // ※ タスクの描画とカード統計はfetchTasksFromSheet内で即座に実行される
-  Promise.allSettled([
-    fetchTasksFromSheet(),
-    fetchConsultTodosFromSheet(),
-    fetchRecordsFromSheet(),
-    fetchPayrollRecordsFromSheet(),
-    fetchClientsFromSheet(),
-    fetchInquiriesFromSheet(),
-    fetchActivityLog(),
-    fetchHolidayMaster(),
-    fetchMemberStatuses()
-  ]).then(function(results) {
-    var SHEET_NAMES = ['TODOシート', '相談記録TODO', '記録', '給与計算記録', 'クライアント', '行政問い合わせ記録', 'アクティビティ', '休日マスタ', '担当者状態'];
-    var successCount = results.filter(function(r) { return r.status === 'fulfilled'; }).length;
-    var failedInfo = results.map(function(r, i) { return r.status === 'rejected' ? SHEET_NAMES[i] : null; }).filter(Boolean);
-    if (failedInfo.length === 0) {
-      console.log('[初期化] 全シート取得済み（' + successCount + '/' + results.length + '）');
-      console.log('[初期化] TODO:', loadTasks().length, '件（通常:' + tasksCache.length + ' + 相談:' + consultTodosCache.length + '）, 記録:', loadRecords().length, '件, クライアント:', clientsCache.length, '件');
-    } else if (failedInfo.length === results.length) {
-      console.error('[初期化] 全シート取得失敗（0/' + results.length + '）失敗:', failedInfo);
-      showGlobalError('スプレッドシートのデータをすべて取得できませんでした。GAS通信またはデプロイ状況を確認してください。');
-    } else {
-      console.error('[初期化] 一部取得失敗（' + successCount + '/' + results.length + '成功）失敗シート:', failedInfo);
-      showGlobalError('スプレッドシートから一部のデータを取得できませんでした（失敗: ' + failedInfo.join('、') + '）。GAS通信またはデプロイ状況を確認してください。');
-    }
-    // 取得できたデータで描画
-    try { renderTasks(); } catch(e) { console.error('[初期化] renderTasks エラー:', e); }
-    try { updateAllStats(); } catch(e) { console.error('[初期化] updateAllStats エラー:', e); }
-    try { renderDoneList(); } catch(e) { console.error('[初期化] renderDoneList エラー:', e); }
-    try { renderPayrollRecord(); } catch(e) { console.error('[初期化] renderPayrollRecord エラー:', e); }
-    // スプレッドシートから取得したクライアント・問い合わせを描画
-    try { renderClients(); } catch(e) { console.error('[初期化] renderClients エラー:', e); }
-    try { updateClientStat(); } catch(e) { console.error('[初期化] updateClientStat エラー:', e); }
-    try { renderInquiryList(); } catch(e) { console.error('[初期化] renderInquiryList エラー:', e); }
-    try { updateInquiryStat(); } catch(e) { console.error('[初期化] updateInquiryStat エラー:', e); }
-    try { renderTimeSummary(); } catch(e) { console.error('[初期化] renderTimeSummary エラー:', e); }
-    try { renderActivityList(); } catch(e) { console.error('[初期化] renderActivityList エラー:', e); }
-    try { renderTodaySchedule(); } catch(e) { console.error('[初期化] renderTodaySchedule エラー:', e); }
-    try { loadTodayWorkAvail();  } catch(e) { console.error('[初期化] loadTodayWorkAvail エラー:', e); }
-    // 一言メッセージ: 宛先を自分以外にデフォルト設定
-    try {
-      var myId = localStorage.getItem('myMemberId') || 'hamada';
-      var toEl = document.getElementById('msg-to');
-      if (toEl) {
-        var defaultTo = myId === 'hamada' ? '髙嵜' : '濱田';
-        toEl.value = defaultTo;
-      }
-    } catch(e) {}
-  });
+  // ===== 初期表示 =====
+  // GASへの一斉アクセス（504の原因）を避けるため、段階的に取得する：
+  //  ① 必須：クライアント → TODO → 本日の勤務予定（1件ずつ順番に）
+  //  ② 初期表示後の遅延トリクル：相談記録TODO → アクティビティ(20件) → 担当者状態 → 行政問い合わせ → 祝日
+  //     （1件ずつ順番に・失敗しても初期化全体は止めない）
+  //  ③ ページを開いたときだけ取得：記録 / 給与計算記録（重いリストデータ。showPage参照）
+  //
+  // ※ セクションごとの失敗は警告バナー＋「再読み込み」ボタンで扱い、成功分は表示する。
+
+  // セクション単位の失敗管理（1件の失敗で全体を失敗扱いにしない）
+  var _initRetryMap = {};   // セクション名 → 再取得関数
+  function markInitFailure(section, retryFn) {
+    _initRetryMap[section] = retryFn;
+    renderInitWarning();
+  }
+  function clearInitFailure(section) {
+    if (_initRetryMap[section]) { delete _initRetryMap[section]; renderInitWarning(); }
+  }
+  function renderInitWarning() {
+    var banner = document.getElementById('global-fetch-error');
+    var msgEl  = document.getElementById('global-fetch-error-msg');
+    if (!banner || !msgEl) return;
+    var names = Object.keys(_initRetryMap);
+    if (names.length === 0) { banner.style.display = 'none'; return; }
+    msgEl.innerHTML = esc(names.join('、')) + ' を取得できませんでした。'
+      + '<button onclick="retryInitFailures()" style="margin-left:10px;background:#fff;color:#c62828;border:none;padding:2px 12px;border-radius:4px;cursor:pointer;font-weight:bold;">再読み込み</button>';
+    banner.style.display = 'block';
+  }
+  function retryInitFailures() {
+    var jobs = Object.keys(_initRetryMap).map(function(k){ return { name: k, fn: _initRetryMap[k] }; });
+    _initRetryMap = {};
+    renderInitWarning();
+    // 1件ずつ順番に再取得（同時に叩かない）
+    jobs.reduce(function(p, job) {
+      return p.then(function() {
+        return Promise.resolve().then(job.fn).then(function() {
+          clearInitFailure(job.name);
+        }, function(e) {
+          console.error('[再読み込み] ' + job.name + ' 失敗:', e);
+          markInitFailure(job.name, job.fn);
+        });
+      });
+    }, Promise.resolve());
+  }
+
+  // ② 遅延トリクル（1件ずつ順番に・非致命）
+  function runDeferredInitLoads() {
+    var jobs = [
+      { name: '相談記録TODO', fn: function() {
+          return fetchConsultTodosFromSheet().then(function() {
+            try { renderTasks(); } catch(e) {}
+            try { updateAllStats(); } catch(e) {}
+            try { renderTodaySchedule(); } catch(e) {}
+          });
+        } },
+      { name: 'アクティビティ', fn: function() {
+          return fetchActivityLog().then(function() { try { renderActivityList(); } catch(e) {} });
+        } },
+      { name: '担当者状態', fn: function() {
+          return fetchMemberStatuses(); // 内部で renderMemberStatuses まで実行
+        } },
+      { name: '行政問い合わせ記録', fn: function() {
+          return fetchInquiriesFromSheet().then(function() {
+            try { renderInquiryList(); } catch(e) {}
+            try { updateInquiryStat(); } catch(e) {}
+          });
+        } },
+      { name: '休日マスタ', fn: function() {
+          return fetchHolidayMaster(); // 失敗しても catch 済み（キャッシュで継続）
+        } }
+    ];
+    jobs.reduce(function(p, job) {
+      return p.then(function() {
+        return Promise.resolve().then(job.fn).then(function() {
+          clearInitFailure(job.name);
+        }, function(e) {
+          console.error('[遅延読込] ' + job.name + ' 失敗:', e);
+          if (job.name !== '休日マスタ') markInitFailure(job.name, job.fn); // 祝日は警告に出さない
+        });
+      });
+    }, Promise.resolve());
+  }
+
+  // 祝日はまずlocalStorageキャッシュから即時反映（GAS取得を待たずカレンダー・営業日判定が動く）
+  loadHolidayCacheFromLocal();
+
+  // ① 必須データを順番に取得（同時多発させない）
+  (function runInitialLoad() {
+    fetchClientsFromSheet()
+      .then(function() {
+        try { renderClients(); } catch(e) {}
+        try { updateClientStat(); } catch(e) {}
+        try { rebuildTaskClientSelect(); } catch(e) {}
+        clearInitFailure('クライアント');
+      })
+      .catch(function(e) {
+        console.error('[初期化] クライアント取得失敗:', e);
+        markInitFailure('クライアント', function() {
+          return fetchClientsFromSheet().then(function() {
+            try { renderClients(); } catch(x) {}
+            try { updateClientStat(); } catch(x) {}
+            try { rebuildTaskClientSelect(); } catch(x) {}
+          });
+        });
+      })
+      .then(function() { return fetchTasksFromSheet(); })
+      .then(function() {
+        try { renderTasks(); } catch(e) {}
+        try { updateAllStats(); } catch(e) {}
+        try { renderTodaySchedule(); } catch(e) {}
+        clearInitFailure('TODO');
+      })
+      .catch(function(e) {
+        console.error('[初期化] TODO取得失敗:', e);
+        markInitFailure('TODO', function() {
+          return fetchTasksFromSheet().then(function() {
+            try { renderTasks(); } catch(x) {}
+            try { updateAllStats(); } catch(x) {}
+            try { renderTodaySchedule(); } catch(x) {}
+          });
+        });
+      })
+      .then(function() {
+        // 本日の勤務予定（必須。失敗しても継続）
+        try { loadTodayWorkAvail(); } catch(e) { console.error('[初期化] loadTodayWorkAvail エラー:', e); }
+        // 一言メッセージ: 宛先を自分以外にデフォルト設定
+        try {
+          var myId = localStorage.getItem('myMemberId') || 'hamada';
+          var toEl = document.getElementById('msg-to');
+          if (toEl) toEl.value = (myId === 'hamada' ? '髙嵜' : '濱田');
+        } catch(e) {}
+        // ② 初期表示が済んだら、残りを順番に遅延読み込み
+        runDeferredInitLoads();
+      });
+  })();
 
   // ===== 勤務予定共有 =====
   (function() {
@@ -8126,8 +8317,7 @@
   function loadWorkAvailability(staffId, month) {
     var url = GAS_URL + '?action=getWorkAvailability&staff_id=' + encodeURIComponent(staffId) + '&month=' + encodeURIComponent(month);
     console.log('[WA] fetch:', url);
-    return fetch(url)
-      .then(function(r) { return r.json(); })
+    return gasGetJson(url)
       .then(function(rows) {
         console.log('[WA] received rows:', Array.isArray(rows) ? rows.length + '件' : '配列でない', rows);
         var map = {};

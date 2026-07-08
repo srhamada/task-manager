@@ -83,12 +83,37 @@ export default async function handler(req) {
     const gasRes = await fetchGas(targetUrl, req.method, body, contentType, 0, logs);
 
     const text = await gasRes.text();
-    logs.push(`[api/gas] 最終 status=${gasRes.status} resLen=${text.length}`);
-    logs.push(`[api/gas] 最終 response先頭: ${text.slice(0, 150)}`);
+    const gasCt = gasRes.headers.get('content-type') || '';
+    const trimmed = (text || '').trim();
+    logs.push(`[api/gas] 最終 status=${gasRes.status} ct=${gasCt} resLen=${text.length}`);
+    logs.push(`[api/gas] 最終 response先頭: ${trimmed.slice(0, 150)}`);
+
+    // 本文がJSONらしいか（content-type or 先頭文字で判定）
+    const looksJson =
+      gasCt.toLowerCase().includes('application/json') ||
+      trimmed.startsWith('{') ||
+      trimmed.startsWith('[');
+
+    // GASが混雑・タイムアウトでHTMLエラーページ（"An error occurred" 等）や
+    // 非2xxを返した場合、それをJSONと偽って返さない（フロントの JSON.parse を壊さない）。
+    // 適切なHTTPステータス（504/502等）で返し、フロント側でリトライ・警告できるようにする。
+    if (!gasRes.ok || !looksJson) {
+      const status = (gasRes.status && gasRes.status >= 400) ? gasRes.status : 502;
+      logs.push(`[api/gas] ⚠ 非JSON/エラー応答 → status=${status} で error JSON を返す`);
+      console.error(logs.join('\n'));
+      return new Response(JSON.stringify({
+        error: 'GASが正しいJSONを返しませんでした（混雑またはタイムアウトの可能性）',
+        gasStatus: gasRes.status,
+        detail: trimmed.slice(0, 200),
+      }), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
+      });
+    }
 
     // successフラグをログに出す
     try {
-      const parsed = JSON.parse(text);
+      const parsed = JSON.parse(trimmed);
       if (parsed && typeof parsed.success !== 'undefined') {
         logs.push(`[api/gas] success=${parsed.success}${parsed.error ? ' error=' + parsed.error : ''}${parsed.sheetName ? ' sheetName=' + parsed.sheetName : ''}${parsed.writtenRow ? ' writtenRow=' + parsed.writtenRow : ''}`);
       }
@@ -97,7 +122,7 @@ export default async function handler(req) {
     // まとめてログ出力
     console.log(logs.join('\n'));
 
-    return new Response(text || '{}', {
+    return new Response(trimmed || '{}', {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
     });
