@@ -2267,7 +2267,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-08-12-v83 (タスク追加のID冪等化・504時のID登録確認・GET一時エラーを5/10/20秒段階再試行に統一)');
+  console.log('[app] コードバージョン: 2026-08-12-v84 (初期表示をgetInitData一括取得に・GAS側CacheService・セクション別の失敗表示と再読み込み)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -2423,9 +2423,10 @@
   }
 
   // シートからアクティビティログを取得
-  function fetchActivityLog() {
+  function fetchActivityLog(preloadedRows) {
     // 全件取得せず最新20件のみ（GAS側も limit を見て末尾20行だけ返す）
-    return gasGetJson(GAS_URL + '?action=getActivityLog&limit=20')
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(GAS_URL + '?action=getActivityLog&limit=20');
+    return src
       .then(function(rows) {
         if (!Array.isArray(rows)) rows = [];
         activityCache = rows.map(function(row) {
@@ -2794,9 +2795,11 @@
   var STATUS_CODE_TO_JP = { 'todo': '未着手', 'inprogress': '進行中', 'waiting': '確認待ち', 'done': '完了' };
 
   // GASからタスク一覧を取得してキャッシュに格納
-  function fetchTasksFromSheet() {
-    console.log('[fetchTasksFromSheet] 取得元: TODOシート');
-    return gasGetJson(GAS_URL)
+  // preloadedRows: getInitData（一括取得）で受信済みの生データ。指定時はGASアクセスしない
+  function fetchTasksFromSheet(preloadedRows) {
+    console.log('[fetchTasksFromSheet] 取得元: ' + (preloadedRows !== undefined ? 'initData(一括取得済み)' : 'TODOシート'));
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(GAS_URL);
+    return src
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -2857,9 +2860,10 @@
   }
 
   // 相談記録TODO取得（O列=TRUE のみ）
-  function fetchConsultTodosFromSheet() {
-    console.log('[fetchConsultTodos] 取得開始');
-    return gasGetJson(GAS_URL + '?action=getConsultTodos')
+  function fetchConsultTodosFromSheet(preloadedRows) {
+    console.log('[fetchConsultTodos] 取得開始' + (preloadedRows !== undefined ? '(initData一括取得済み)' : ''));
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(GAS_URL + '?action=getConsultTodos');
+    return src
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && rows.error) { throw new Error('[fetchConsultTodos] GASエラー: ' + rows.error); }
@@ -3066,8 +3070,9 @@
   }
 
   // --- 担当者状態の取得・更新・描画 ---
-  function fetchMemberStatuses() {
-    return gasGetJson(GAS_URL + '?action=getMemberStatuses')
+  function fetchMemberStatuses(preloadedData) {
+    var src = (preloadedData !== undefined) ? Promise.resolve(preloadedData) : gasGetJson(GAS_URL + '?action=getMemberStatuses');
+    return src
       .then(function(data) {
         if (data && typeof data === 'object') {
           memberStatusCache = {};
@@ -4440,10 +4445,11 @@
   };
 
   // GASからクライアント一覧を取得
-  function fetchClientsFromSheet() {
+  function fetchClientsFromSheet(preloadedRows) {
     var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('クライアント');
-    console.log('[fetchClientsFromSheet] 取得開始');
-    return gasGetJson(url)
+    console.log('[fetchClientsFromSheet] 取得開始' + (preloadedRows !== undefined ? '(initData一括取得済み)' : ''));
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(url);
+    return src
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -4535,10 +4541,11 @@
   };
 
   // GASから行政問い合わせ記録一覧を取得
-  function fetchInquiriesFromSheet() {
+  function fetchInquiriesFromSheet(preloadedRows) {
     var url = GAS_URL + (GAS_URL.indexOf('?') === -1 ? '?' : '&') + 'sheet=' + encodeURIComponent('行政問い合わせ記録');
-    console.log('[fetchInquiriesFromSheet] 取得開始');
-    return gasGetJson(url)
+    console.log('[fetchInquiriesFromSheet] 取得開始' + (preloadedRows !== undefined ? '(initData一括取得済み)' : ''));
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(url);
+    return src
       .then(function(rows) {
         if (!Array.isArray(rows)) {
           if (rows && Array.isArray(rows.data)) rows = rows.data;
@@ -5717,8 +5724,9 @@
   };
 
   // 休日マスタ取得（内容が頻繁に変わらないためlocalStorageにキャッシュ。失敗しても致命扱いにしない）
-  function fetchHolidayMaster() {
-    return gasGetJson(GAS_URL + '?action=getHolidayMaster')
+  function fetchHolidayMaster(preloadedRows) {
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(GAS_URL + '?action=getHolidayMaster');
+    return src
       .then(function(rows) {
         if (!Array.isArray(rows)) rows = [];
         holidayMasterCache = rows.map(function(r) {
@@ -8270,7 +8278,31 @@
     }, Promise.resolve());
   }
 
-  // ② 遅延トリクル（1件ずつ順番に・非致命）
+  // ===== セクション別の読み込み中／失敗表示 =====
+  // 各セクションは成功・失敗にかかわらず必ずどちらかの表示に確定させ、
+  // 「読み込み中…」のまま放置しない。
+  var INIT_SECTION_ELEMS = {
+    'TODO':               ['todo-list', 'today-schedule-list'],
+    'アクティビティ':     ['activity-list'],
+    '行政問い合わせ記録': ['inquiry-list'],
+    '勤務予定':           ['work-avail-today-content']
+  };
+  function _setSectionMsg_(elId, text, withRetry) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var inner = '<span style="color:' + (withRetry ? '#c62828' : '#9e9e9e') + ';font-size:0.78rem;">' + esc(text) + '</span>'
+      + (withRetry ? ' <button onclick="retryInitFailures()" style="margin-left:6px;background:#fff;border:1px solid #c62828;color:#c62828;padding:1px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;">再読み込み</button>' : '');
+    var block = '<div style="text-align:center;padding:8px 0;">' + inner + '</div>';
+    el.innerHTML = (el.tagName === 'UL') ? '<li style="list-style:none;">' + block + '</li>' : block;
+  }
+  function initSectionLoading_(name) {
+    (INIT_SECTION_ELEMS[name] || []).forEach(function(id) { _setSectionMsg_(id, '読み込み中…', false); });
+  }
+  function initSectionFailed_(name) {
+    (INIT_SECTION_ELEMS[name] || []).forEach(function(id) { _setSectionMsg_(id, '読み込みに失敗しました', true); });
+  }
+
+  // ② 遅延トリクル（1件ずつ順番に・非致命）※getInitData失敗時のフォールバック用
   function runDeferredInitLoads() {
     var jobs = [
       { name: '相談記録TODO', fn: function() {
@@ -8302,7 +8334,10 @@
           clearInitFailure(job.name);
         }, function(e) {
           console.error('[遅延読込] ' + job.name + ' 失敗:', e);
-          if (job.name !== '休日マスタ') markInitFailure(job.name, job.fn); // 祝日は警告に出さない
+          if (job.name !== '休日マスタ') {
+            markInitFailure(job.name, job.fn); // 祝日は警告に出さない
+            initSectionFailed_(job.name);      // 「読み込み中」のまま残さない
+          }
         });
       });
     }, Promise.resolve());
@@ -8311,8 +8346,61 @@
   // 祝日はまずlocalStorageキャッシュから即時反映（GAS取得を待たずカレンダー・営業日判定が動く）
   loadHolidayCacheFromLocal();
 
-  // ① 必須データを順番に取得（同時多発させない）
-  (function runInitialLoad() {
+  // getInitData（一括取得）の結果を各セクションへ反映する。
+  // 各セクションは独立に処理し（Promise.allで並行・失敗も個別）、
+  // 1セクションの失敗（{_error}含む）が他セクションを止めない。
+  function applyInitData_(d) {
+    var jobs = [
+      { name: 'クライアント', data: d.clients,
+        apply: function(v) { return fetchClientsFromSheet(v); },
+        render: function() { renderClients(); updateClientStat(); rebuildTaskClientSelect(); } },
+      { name: 'TODO', data: d.todos,
+        apply: function(v) { return fetchTasksFromSheet(v); },
+        render: function() { renderTasks(); updateAllStats(); renderTodaySchedule(); } },
+      { name: '相談記録TODO', data: d.consultTodos,
+        apply: function(v) { return fetchConsultTodosFromSheet(v); },
+        render: function() { renderTasks(); updateAllStats(); renderTodaySchedule(); } },
+      { name: 'アクティビティ', data: d.activity,
+        apply: function(v) { return fetchActivityLog(v); },
+        render: function() { renderActivityList(); } },
+      { name: '担当者状態', data: d.memberStatuses,
+        apply: function(v) { return fetchMemberStatuses(v); },
+        render: function() {} },
+      { name: '行政問い合わせ記録', data: d.inquiries,
+        apply: function(v) { return fetchInquiriesFromSheet(v); },
+        render: function() { renderInquiryList(); updateInquiryStat(); } },
+      { name: '休日マスタ', data: d.holidays, nonFatal: true,
+        apply: function(v) { return fetchHolidayMaster(v); },
+        render: function() {} },
+      { name: '勤務予定', data: d.workAvailability,
+        apply: function(v) { return loadTodayWorkAvail(v); },
+        render: function() {} }
+    ];
+    return Promise.all(jobs.map(function(job) {
+      // 個別再取得用（バナーの「再読み込み」から呼ばれる）
+      var retryFn = function() {
+        return job.apply(undefined).then(function() {
+          try { job.render(); } catch (e) {}
+        });
+      };
+      var run = (job.data && job.data._error)
+        ? Promise.reject(new Error('GAS側エラー: ' + job.data._error))
+        : Promise.resolve().then(function() { return job.apply(job.data); });
+      return run.then(function() {
+        try { job.render(); } catch (e) { console.error('[初期化] ' + job.name + ' 描画エラー:', e); }
+        clearInitFailure(job.name);
+      }).catch(function(e) {
+        console.error('[初期化] ' + job.name + ' 反映失敗:', e && e.message ? e.message : e);
+        if (!job.nonFatal) {
+          markInitFailure(job.name, retryFn);
+          initSectionFailed_(job.name);
+        }
+      });
+    }));
+  }
+
+  // 従来の個別取得（getInitData失敗時・旧GASデプロイ時のフォールバック）
+  function legacyInitialLoad_() {
     fetchClientsFromSheet()
       .then(function() {
         try { renderClients(); } catch(e) {}
@@ -8346,24 +8434,49 @@
             try { renderTodaySchedule(); } catch(x) {}
           });
         });
+        initSectionFailed_('TODO');
       })
       .then(function() {
-        // 一言メッセージ: 宛先を自分以外にデフォルト設定
-        try {
-          var myId = localStorage.getItem('myMemberId') || 'hamada';
-          var toEl = document.getElementById('msg-to');
-          if (toEl) toEl.value = (myId === 'hamada' ? '髙嵜' : '濱田');
-        } catch(e) {}
-        // 本日の勤務予定（必須。失敗しても継続）
-        // ※ 完了を待ってから遅延トリクルへ進む＝初期表示中のGAS同時実行を実質1件に抑える
-        //   （以前はここで待ち合わせず発火していたため、遅延トリクルと並走して同時2件になっていた）
+        // 本日の勤務予定（失敗しても継続。ただし「読み込み中」のまま残さない）
         return Promise.resolve()
           .then(function() { return loadTodayWorkAvail(); })
-          .catch(function(e) { console.error('[初期化] loadTodayWorkAvail エラー:', e); });
+          .then(function() { clearInitFailure('勤務予定'); })
+          .catch(function(e) {
+            console.error('[初期化] loadTodayWorkAvail エラー:', e);
+            markInitFailure('勤務予定', function() { return loadTodayWorkAvail(); });
+            initSectionFailed_('勤務予定');
+          });
       })
       .then(function() {
-        // ② 初期表示が済んだら、残りを順番に遅延読み込み
+        // 残りを順番に遅延読み込み
         runDeferredInitLoads();
+      });
+  }
+
+  // ① 初期表示：まず getInitData（1回のGASアクセスで一括取得）を試み、
+  //    失敗または旧GAS（未対応）の場合は従来の個別取得にフォールバックする。
+  (function runInitialLoad() {
+    Object.keys(INIT_SECTION_ELEMS).forEach(initSectionLoading_);
+    // 一言メッセージ: 宛先を自分以外にデフォルト設定（データ取得とは無関係のUI初期化）
+    try {
+      var myId = localStorage.getItem('myMemberId') || 'hamada';
+      var toEl = document.getElementById('msg-to');
+      if (toEl) toEl.value = (myId === 'hamada' ? '髙嵜' : '濱田');
+    } catch(e) {}
+
+    var waMonth = todayJST().substring(0, 7);
+    gasGetJson(GAS_URL + '?action=getInitData&waStaff=takasaki&waMonth=' + encodeURIComponent(waMonth))
+      .then(function(d) {
+        // 旧GAS（getInitData未対応）はデフォルトのTODO配列を返すため、形式で判定する
+        if (!d || d.initData !== true) {
+          throw new Error('getInitData未対応の応答（GASが旧デプロイの可能性）');
+        }
+        console.log('[初期化] getInitData成功 GAS処理内訳(ms):', JSON.stringify(d._timings || {}));
+        return applyInitData_(d);
+      })
+      .catch(function(e) {
+        console.warn('[初期化] getInitData失敗 → 従来の個別取得にフォールバック:', e && e.message ? e.message : e);
+        legacyInitialLoad_();
       });
   })();
 
@@ -8445,10 +8558,11 @@
     loadAndRenderWaCalendar();
   }
 
-  function loadWorkAvailability(staffId, month) {
+  function loadWorkAvailability(staffId, month, preloadedRows) {
     var url = GAS_URL + '?action=getWorkAvailability&staff_id=' + encodeURIComponent(staffId) + '&month=' + encodeURIComponent(month);
-    console.log('[WA] fetch:', url);
-    return gasGetJson(url)
+    console.log('[WA] fetch:', (preloadedRows !== undefined ? '(initData一括取得済み)' : url));
+    var src = (preloadedRows !== undefined) ? Promise.resolve(preloadedRows) : gasGetJson(url);
+    return src
       .then(function(rows) {
         console.log('[WA] received rows:', Array.isArray(rows) ? rows.length + '件' : '配列でない', rows);
         var map = {};
@@ -8658,10 +8772,10 @@
       });
   }
 
-  function loadTodayWorkAvail() {
+  function loadTodayWorkAvail(preloadedRows) {
     var today = todayJST();
     // Promiseを返す（初期表示チェーンが完了を待ってから次の取得に進めるように）
-    return loadWorkAvailability('takasaki', today.substring(0, 7)).then(function() { renderTodayWorkAvail(); });
+    return loadWorkAvailability('takasaki', today.substring(0, 7), preloadedRows).then(function() { renderTodayWorkAvail(); });
   }
 
   function renderTodayWorkAvail() {

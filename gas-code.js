@@ -38,7 +38,7 @@ function doGet(e) {
   }
   if (sheetName === 'クライアント') {
     Logger.log('[doGet] クライアントシート取得');
-    return getSheetData_(SHEET_CLIENT);
+    return jsonResponse_(cachedClients_());
   }
   if (sheetName === '算定年更管理') {
     Logger.log('[doGet] 算定年更管理シート取得');
@@ -58,15 +58,16 @@ function doGet(e) {
   }
 
   // ── action ハンドラ ──
+  if (action === 'getInitData')           return handleGetInitData_(e);
   if (action === 'getConsultTodos')       return handleGetConsultTodos_();
   if (action === 'getBusySeasonRecords')  return handleGetBusySeasonRecords_(e);
   if (action === 'getStressCheckRecords') return handleGetStressCheckRecords_();
   if (action === 'getActivityLog')        return handleGetActivityLog_(e);
-  if (action === 'getHolidayMaster')      return handleGetHolidayMaster_();
+  if (action === 'getHolidayMaster')      return jsonResponse_(cachedHolidays_());
   if (action === 'getMemberStatuses')     return handleGetMemberStatuses_();
   if (action === 'getMessages')           return handleGetMessages_();
   if (action === 'getFeeMonthly')         return handleGetFeeMonthly_(e);
-  if (action === 'getWorkAvailability')   return handleGetWorkAvailability_(e);
+  if (action === 'getWorkAvailability')   return jsonResponse_(cachedWorkAvail_(e));
 
   // ── デフォルト: TODO シート ──
   Logger.log('[doGet] 取得シート: ' + SHEET_TODO + ' (デフォルト)');
@@ -305,6 +306,9 @@ function doPost(e) {
       return jsonResponse_({ success: false, error: 'appendRowが反映されませんでした', sheetName: sheetName });
     }
 
+    // クライアント新規追加時はクライアント一覧キャッシュを破棄
+    if (sheetName === SHEET_CLIENT) cacheRemove_('clients');
+
     Logger.log('[doPost] ✅ 新規追加成功: シート=' + sheetName + ', 行=' + lastRowAfter);
     return jsonResponse_({
       success: true,
@@ -524,6 +528,9 @@ function handleUpdateRow_(ss, data) {
           sheet.getRange(rowNum, j + 1).setValue(data[colName]);
         }
       }
+
+      // クライアント更新時はクライアント一覧キャッシュを破棄（古い一覧を返さない）
+      if (sheetName === SHEET_CLIENT) cacheRemove_('clients');
 
       Logger.log('[updateRow] 行' + rowNum + ' の更新完了');
       return jsonResponse_({ success: true, updatedRow: rowNum
@@ -1242,6 +1249,102 @@ function handleDeleteMessage_(data) {
   return jsonResponse_({ success: false, error: 'not found' });
 }
 
+// --------------- 初期表示用 一括取得 + CacheService ---------------
+// 背景：GASは1実行ごとにランダムな大遅延が乗る（実測：ウォームでも2〜34秒、コールドで40秒超。
+// データ量とは無関係で、1.8KBの行政問い合わせ取得に33秒かかる例も実測済み）。
+// 初期表示で8回アクセスすると、どれかが遅延に当たる確率が高く、Vercelの制限（約25秒）を超えて
+// 404/504になる。対策として初期表示データを1実行にまとめ、「遅延の抽選回数」を8回→1回に減らす。
+
+// キャッシュ経由で値を取得。ヒットしなければ buildFn で生成して保存（TTL秒）。
+// CacheServiceは1キー100KB上限のため、超える値は保存せず素通しする。
+var CACHE_PREFIX = 'v1_';
+function cacheThrough_(key, ttlSec, buildFn) {
+  var full = CACHE_PREFIX + key;
+  try {
+    var hit = CacheService.getScriptCache().get(full);
+    if (hit) return JSON.parse(hit);
+  } catch (e) { /* キャッシュ障害時は素通し */ }
+  var value = buildFn();
+  try {
+    var s = JSON.stringify(value);
+    if (s.length < 95000) CacheService.getScriptCache().put(full, s, ttlSec);
+  } catch (e) { /* 保存失敗は無視（次回また生成するだけ） */ }
+  return value;
+}
+function cacheRemove_(key) {
+  try { CacheService.getScriptCache().remove(CACHE_PREFIX + key); } catch (e) {}
+}
+
+// TextOutput → 元のデータに戻す（既存ハンドラのロジックをそのまま再利用するため）
+function outputToData_(output) {
+  return JSON.parse(output.getContent());
+}
+
+// 更新頻度の低いデータのキャッシュ付き取得
+// クライアント一覧：クライアント追加・更新時に doPost 側で cacheRemove_('clients') する
+function cachedClients_() {
+  return cacheThrough_('clients', 300, function() {
+    return outputToData_(getSheetData_(SHEET_CLIENT));
+  });
+}
+// 祝日：手動でシートを直した場合も最大6時間で反映される
+function cachedHolidays_() {
+  return cacheThrough_('holidays', 21600, function() {
+    return outputToData_(handleGetHolidayMaster_());
+  });
+}
+// 勤務予定：staff+month 単位でキャッシュ。saveWorkAvailability 時に該当キーを削除
+function cachedWorkAvail_(e) {
+  var staffId = (e && e.parameter && e.parameter.staff_id) ? String(e.parameter.staff_id) : '';
+  var month   = (e && e.parameter && e.parameter.month)    ? String(e.parameter.month)    : '';
+  if (!staffId || !month) return outputToData_(handleGetWorkAvailability_(e)); // 全件系はキャッシュしない
+  return cacheThrough_('wa_' + staffId + '_' + month, 300, function() {
+    return outputToData_(handleGetWorkAvailability_(e));
+  });
+}
+
+// 初期表示データの一括取得。
+// 各セクションは個別に try/catch し、失敗したセクションだけ {_error:...} で返す
+// （1セクションの失敗で初期表示全体を失敗させない）。
+// _timings に区間別の処理時間(ms)を含める（ボトルネック実測用）。
+function handleGetInitData_(e) {
+  var t0 = new Date().getTime();
+  var timings = {};
+  function section(name, fn) {
+    var s = new Date().getTime();
+    var v;
+    try { v = fn(); } catch (err) { v = { _error: String(err && err.message ? err.message : err) }; }
+    timings[name] = new Date().getTime() - s;
+    return v;
+  }
+  var waStaff = (e && e.parameter && e.parameter.waStaff) ? String(e.parameter.waStaff) : 'takasaki';
+  var waMonth = (e && e.parameter && e.parameter.waMonth) ? String(e.parameter.waMonth)
+              : Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM');
+
+  var result = {
+    initData: true,
+    waStaff: waStaff,
+    waMonth: waMonth,
+    // 追加・更新の即時反映が必要 → キャッシュしない
+    todos:        section('todos',        function() { return outputToData_(getSheetData_(SHEET_TODO)); }),
+    consultTodos: section('consultTodos', function() { return outputToData_(handleGetConsultTodos_()); }),
+    activity:     section('activity',     function() { return outputToData_(handleGetActivityLog_({ parameter: { limit: '20' } })); }),
+    inquiries:    section('inquiries',    function() { return outputToData_(getSheetData_(SHEET_INQUIRY)); }),
+    // 更新頻度が低い → CacheService（各キャッシュの無効化は上記コメント参照）
+    clients:      section('clients',      function() { return cachedClients_(); }),
+    holidays:     section('holidays',     function() { return cachedHolidays_(); }),
+    workAvailability: section('workAvailability', function() {
+      return cachedWorkAvail_({ parameter: { staff_id: waStaff, month: waMonth } });
+    }),
+    // 担当者状態は元々CacheService直読みで軽量・常に最新
+    memberStatuses: section('memberStatuses', function() { return outputToData_(handleGetMemberStatuses_()); })
+  };
+  timings.total = new Date().getTime() - t0;
+  result._timings = timings;
+  Logger.log('[getInitData] timings=' + JSON.stringify(timings));
+  return jsonResponse_(result);
+}
+
 // --------------- ユーティリティ ---------------
 
 function jsonResponse_(obj) {
@@ -1459,6 +1562,16 @@ function handleSaveWorkAvailability_(ss, data) {
     }
     count++;
   }
+
+  // 保存した月の勤務予定キャッシュを破棄（古い予定を返さない）
+  var touchedMonths = {};
+  for (var m = 0; m < records.length; m++) {
+    var d = String(records[m].date || '');
+    if (d.length >= 7) touchedMonths[d.substring(0, 7)] = true;
+  }
+  Object.keys(touchedMonths).forEach(function(mon) {
+    cacheRemove_('wa_' + staffId + '_' + mon);
+  });
 
   Logger.log('[saveWorkAvailability] 完了 count=' + count);
   return jsonResponse_({ success: true, count: count });
