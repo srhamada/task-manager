@@ -99,10 +99,23 @@ export default async function handler(req) {
     // 適切なHTTPステータス（504/502等）で返し、フロント側でリトライ・警告できるようにする。
     if (!gasRes.ok || !looksJson) {
       const status = (gasRes.status && gasRes.status >= 400) ? gasRes.status : 502;
-      logs.push(`[api/gas] ⚠ 非JSON/エラー応答 → status=${status} で error JSON を返す`);
+      // 原因別メッセージ（gasStatus フィールドはフロントの一時的404判定に使うため必ず残す）
+      let cause;
+      if (gasRes.status === 404) {
+        cause = 'Google側の一時的な応答エラーの可能性（gasStatus 404・再試行対象）';
+      } else if (gasRes.status === 429) {
+        cause = 'アクセス上限またはクォータの可能性（gasStatus 429）';
+      } else if (gasRes.status === 502 || gasRes.status === 503 || gasRes.status === 504) {
+        cause = `GASの混雑・障害またはタイムアウトの可能性（gasStatus ${gasRes.status}）`;
+      } else if (gasRes.ok && !looksJson) {
+        cause = 'GASの権限・デプロイ設定またはHTML応答の可能性（200だがJSONではない応答）';
+      } else {
+        cause = `GASが正しいJSONを返しませんでした（gasStatus ${gasRes.status}）`;
+      }
+      logs.push(`[api/gas] ⚠ 非JSON/エラー応答 → status=${status} で error JSON を返す: ${cause}`);
       console.error(logs.join('\n'));
       return new Response(JSON.stringify({
-        error: 'GASが正しいJSONを返しませんでした（混雑またはタイムアウトの可能性）',
+        error: cause,
         gasStatus: gasRes.status,
         detail: trimmed.slice(0, 200),
       }), {
@@ -129,7 +142,9 @@ export default async function handler(req) {
   } catch (e) {
     logs.push(`[api/gas] ❌ ERROR: ${e.name} ${e.message}`);
     console.error(logs.join('\n'));
-    return new Response(JSON.stringify({ error: 'GAS接続失敗: ' + (e.message || String(e)) }), {
+    return new Response(JSON.stringify({
+      error: '通信障害またはタイムアウトの可能性（GASへの接続に失敗）: ' + (e.message || String(e)),
+    }), {
       status: 502,
       headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
     });

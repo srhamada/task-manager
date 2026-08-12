@@ -2267,7 +2267,7 @@
 </main>
 
 <script>
-  console.log('[app] コードバージョン: 2026-07-08-v81 (初期表示のGAS同時アクセス抑制・504解消／gasGetJson同時2件制限・遅延トリクル・非致命化)');
+  console.log('[app] コードバージョン: 2026-08-12-v83 (タスク追加のID冪等化・504時のID登録確認・GET一時エラーを5/10/20秒段階再試行に統一)');
 
   // ===== 日付ユーティリティ（JST・共通） =====
   function formatDateJST(value) {
@@ -2553,10 +2553,27 @@
   // 目的：初期表示や再取得でGASへ一斉アクセスして504になるのを防ぐ。
   //  ・同時実行数を GAS_MAX_CONCURRENT 件に制限（キュー方式）→ 何件呼んでも同時にGASを叩くのは最大2件
   //  ・HTTPステータスとContent-Typeを確認してからJSON.parse（HTMLエラーをJSONとして解釈しない）
-  //  ・504/502/503・ネットワークエラー・JSON以外の応答は1回だけ短い待機後に再試行（控えめ）
+  //  ・GETの一時的エラー（gasStatus:404 / 502 / 503 / 504 / 非JSON応答 / ネットワークエラー）は
+  //    5秒→10秒→20秒の間隔で最大3回再試行する。コールド状態のGASは実測で回復まで十数秒〜40秒
+  //    かかるため、短い待機（旧: 700ms×1回）では足りない。
+  //  ・この再試行はGET（読み込み）専用。POST（書き込み）には適用しない — 結果不明のまま再送すると
+  //    二重登録の危険があるため、書き込みは各呼び出し元でIDによる登録確認を行う（addTask参照）。
   var GAS_MAX_CONCURRENT = 2;
   var _gasActive = 0;
   var _gasQueue = [];
+  var GAS_RETRY_DELAYS = [5000, 10000, 20000];
+
+  // Vercel /api/gas が返す「Google側の一時的404」かどうか（gasStatus:404 のエラーJSONに限定）
+  function _gasIsTransient404_(status, body) {
+    if (status !== 404) return false;
+    if (!body || body.charAt(0) !== '{') return false;
+    try {
+      var parsed = JSON.parse(body);
+      return !!(parsed && parsed.gasStatus === 404);
+    } catch (e) {
+      return false;
+    }
+  }
 
   function _gasPump() {
     while (_gasActive < GAS_MAX_CONCURRENT && _gasQueue.length > 0) {
@@ -2570,29 +2587,50 @@
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
   }
 
-  // 実際の取得（ステータス・content-type確認 + 1回リトライ）
-  function _gasFetchJson(url, isRetry) {
+  // 一時的エラー時の再試行待機（5秒→10秒→20秒）。retryCount = これまでの再試行回数
+  function _gasRetryOrThrow_(url, retryCount, reason, err) {
+    if (retryCount < GAS_RETRY_DELAYS.length) {
+      var wait = GAS_RETRY_DELAYS[retryCount];
+      console.warn('[gasGetJson] ' + reason + ' → ' + (wait / 1000) + '秒後に再試行 (' + (retryCount + 1) + '/' + GAS_RETRY_DELAYS.length + '):', url);
+      return _gasDelay(wait).then(function() { return _gasFetchJson(url, retryCount + 1); });
+    }
+    throw err;
+  }
+
+  // 実際の取得（ステータス・content-type確認 + 一時的エラーの段階再試行）※GET専用
+  function _gasFetchJson(url, retryCount) {
+    retryCount = retryCount || 0;
     return fetch(url).then(function(res) {
       return res.text().then(function(text) {
         var ct   = (res.headers.get('content-type') || '').toLowerCase();
         var body = (text || '').trim();
         if (!res.ok) {
-          // 504/502/503 は1回だけ再試行（同時再試行で詰まらないよう控えめに）
-          if (!isRetry && (res.status === 504 || res.status === 502 || res.status === 503)) {
-            console.warn('[gasGetJson] HTTP ' + res.status + ' → 700ms後に1回だけ再試行:', url);
-            return _gasDelay(700).then(function() { return _gasFetchJson(url, true); });
+          // 原因別メッセージ
+          var causeMsg;
+          var transient = false;
+          if (_gasIsTransient404_(res.status, body)) {
+            causeMsg = 'Google側の一時的な応答エラーの可能性（gasStatus 404）';
+            transient = true;
+          } else if (res.status === 429) {
+            causeMsg = 'アクセス上限またはクォータの可能性（HTTP 429）';
+          } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+            causeMsg = 'GASの混雑・障害またはタイムアウトの可能性（HTTP ' + res.status + '）';
+            transient = true;
+          } else {
+            causeMsg = 'HTTP ' + res.status;
           }
-          throw new Error('HTTP ' + res.status + (body ? '：' + body.slice(0, 100) : ''));
+          var httpErr = new Error(causeMsg + '。再試行しましたが回復しませんでした' + (body ? '：' + body.slice(0, 100) : ''));
+          if (transient) {
+            return _gasRetryOrThrow_(url, retryCount, causeMsg, httpErr);
+          }
+          throw new Error(causeMsg + (body ? '：' + body.slice(0, 100) : ''));
         }
         if (!body) return null;
         // JSON以外（GAS/Vercelが返すHTMLエラー "An error o..." 等）を JSON.parse しない
         var looksJson = ct.indexOf('application/json') !== -1 || body.charAt(0) === '[' || body.charAt(0) === '{';
         if (!looksJson) {
-          if (!isRetry) {
-            console.warn('[gasGetJson] JSON以外の応答 → 700ms後に1回だけ再試行:', body.slice(0, 60));
-            return _gasDelay(700).then(function() { return _gasFetchJson(url, true); });
-          }
-          throw new Error('サーバーからJSON以外の応答を受信しました：' + body.slice(0, 80));
+          return _gasRetryOrThrow_(url, retryCount, 'JSON以外の応答（' + body.slice(0, 40) + '）',
+            new Error('GASの権限・デプロイ設定またはHTML応答の可能性（200だがJSONではない応答）：' + body.slice(0, 80)));
         }
         try {
           return JSON.parse(body);
@@ -2601,12 +2639,9 @@
         }
       });
     }, function(netErr) {
-      // ネットワークエラーも1回だけ再試行
-      if (!isRetry) {
-        console.warn('[gasGetJson] ネットワークエラー → 700ms後に1回だけ再試行:', netErr && netErr.message);
-        return _gasDelay(700).then(function() { return _gasFetchJson(url, true); });
-      }
-      throw netErr;
+      var netMsg = netErr && netErr.message ? netErr.message : String(netErr);
+      return _gasRetryOrThrow_(url, retryCount, 'ネットワークエラー（' + netMsg + '）',
+        new Error('通信障害またはタイムアウトの可能性：' + netMsg));
     });
   }
 
@@ -2614,7 +2649,7 @@
   function gasGetJson(url) {
     return new Promise(function(resolve, reject) {
       _gasQueue.push(function() {
-        _gasFetchJson(url, false).then(function(v) {
+        _gasFetchJson(url, 0).then(function(v) {
           _gasActive--; _gasPump(); resolve(v);
         }, function(e) {
           _gasActive--; _gasPump(); reject(e);
@@ -3085,8 +3120,8 @@
   var quickMsgCache = [];
 
   function fetchQuickMessages() {
-    return fetch(GAS_URL + '?action=getMessages')
-      .then(function(res) { return res.json(); })
+    // 他のGET取得と同じ共通ヘルパー経由（同時実行キュー・ステータス確認・再試行が効く）
+    return gasGetJson(GAS_URL + '?action=getMessages')
       .then(function(data) {
         console.log('[fetchQuickMessages] 取得データ:', JSON.stringify(data));
         quickMsgCache = Array.isArray(data) ? data : [];
@@ -3357,6 +3392,23 @@
     }
   }
 
+  // 直前に「登録結果不明（504等）」で終わったタスク。
+  // 同じ内容をもう一度「追加」したときに同一IDを使い回すことで、
+  // GAS側のID重複チェックと合わせて二重登録を防ぐ。
+  var _pendingAddTask = null; // { id, key }
+
+  // TODOシートを再取得して、指定IDのタスクが保存済みか確認する。
+  // gasGetJson経由なので504/一時的404はGETの段階再試行（5/10/20秒）が効く。
+  function verifyTaskSaved_(taskId) {
+    console.log('[addTask] 登録確認のためTODOシートを再取得: ID=' + taskId);
+    return fetchTasksFromSheet().then(function(tasks) {
+      return (tasks || []).some(function(t) { return String(t.id) === String(taskId); });
+    }).catch(function(e) {
+      console.error('[addTask] 登録確認の取得自体に失敗:', e && e.message ? e.message : e);
+      return false; // 確認できない → 未登録扱い（同一IDでの再送なら二重登録にならない）
+    });
+  }
+
   function addTask() {
     var clientEl   = document.getElementById('new-task-client');
     var typeEl     = document.getElementById('new-task-type');
@@ -3379,9 +3431,10 @@
       assigneeName = ASSIGNEE_LABEL[aVal] || aVal || '';
     }
     var now = todayJST();
+    var taskClient = clientEl ? clientEl.value.trim() : '';
 
     var postData = {
-      'クライアント': clientEl ? clientEl.value.trim() : '',
+      'クライアント': taskClient,
       '業務種別':     category,
       'タスク内容':   text,
       '期限':         dueEl ? dueEl.value : '',
@@ -3392,29 +3445,101 @@
       '更新日':       now
     };
 
+    // ID採番はフロントで行う（504等で結果不明になっても、このIDで登録済みか確認できる）。
+    // 直前の結果不明タスクと内容が同じなら同一IDを再利用 → GAS側で重複登録が防止される。
+    var contentKey = JSON.stringify([postData['クライアント'], postData['業務種別'], postData['タスク内容'], postData['期限'], postData['担当者'], postData['状態']]);
+    var taskId;
+    if (_pendingAddTask && _pendingAddTask.key === contentKey) {
+      taskId = _pendingAddTask.id;
+      console.log('[addTask] 結果不明だった前回と同一内容 → 同じIDで再送: ID=' + taskId);
+    } else {
+      taskId = Date.now();
+    }
+    postData['ID'] = taskId;
+
     // 追加ボタンを無効化
     var addBtn = document.querySelector('[onclick="addTask()"]');
     if (addBtn) { addBtn.disabled = true; addBtn.textContent = '送信中…'; }
 
-    fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(postData)
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(result) {
-      if (result && result.error) throw new Error(result.error);
-      var taskClient = clientEl ? clientEl.value.trim() : '';
-      addActivity('todo_created', actText(taskClient, text, ' をTODOに追加'));
+    function clearForm_() {
       typeEl.value = '';
       if (otherEl)    { otherEl.value = ''; otherEl.style.display = 'none'; }
       if (clientEl)   clientEl.value   = '';
       if (assigneeEl) assigneeEl.value = '';
       if (dueEl)      dueEl.value      = '';
       typeEl.focus();
-      return refreshFromSheet();
+    }
+
+    // 登録成功が確定したときの後処理。
+    // 一覧再取得・統計更新・アクティビティ取得は登録とは別処理（失敗しても登録自体は成立済み）。
+    // 従来の refreshFromSheet()（10件一斉取得）はやめ、タスク追加で変わるものだけ取得する。
+    function onAddConfirmed_(listAlreadyFetched) {
+      _pendingAddTask = null;
+      addActivity('todo_created', actText(taskClient, text, ' をTODOに追加'));
+      clearForm_();
+      var p = listAlreadyFetched ? Promise.resolve() : fetchTasksFromSheet();
+      return p.then(function() {
+        try { renderTasks(); } catch(e) {}
+        try { updateAllStats(); } catch(e) {}
+        try { renderTodaySchedule(); } catch(e) {}
+        return fetchActivityLog().then(function() { try { renderActivityList(); } catch(e) {} });
+      }).catch(function(e) {
+        // 登録は成功している。一覧側の失敗は警告バナー＋再読み込みで回復できるようにする
+        console.warn('[addTask] 登録は成功。一覧の再取得に失敗:', e && e.message ? e.message : e);
+        markInitFailure('TODO', function() {
+          return fetchTasksFromSheet().then(function() {
+            try { renderTasks(); } catch(x) {}
+            try { updateAllStats(); } catch(x) {}
+            try { renderTodaySchedule(); } catch(x) {}
+          });
+        });
+      });
+    }
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(postData)
+    })
+    .then(function(res) {
+      return res.text().then(function(text2) {
+        var body = (text2 || '').trim();
+        var looksJson = body.charAt(0) === '{' || body.charAt(0) === '[';
+        if (!res.ok || !looksJson) {
+          // 504等：GAS側では保存が完了しているのに応答だけ間に合わなかった可能性がある。
+          // 自動再送はせず「結果不明」として、IDによる登録確認に回す。
+          var err = new Error('HTTP ' + res.status + (body ? '：' + body.slice(0, 80) : ''));
+          err.unknownResult = true;
+          throw err;
+        }
+        return JSON.parse(body);
+      });
+    }, function(netErr) {
+      // 送信後に切断された可能性もあるため、ネットワークエラーも結果不明扱い
+      var err = new Error(netErr && netErr.message ? netErr.message : String(netErr));
+      err.unknownResult = true;
+      throw err;
+    })
+    .then(function(result) {
+      if (result && result.error) throw new Error(result.error); // GASが明示的にエラー → 未登録
+      if (result && result.duplicate) {
+        console.log('[addTask] GAS側で登録済みと判定（duplicate）: ID=' + taskId + ' → 再登録なし');
+      }
+      return onAddConfirmed_(false);
     })
     .catch(function(e) {
+      if (e && e.unknownResult) {
+        console.warn('[addTask] 登録結果不明（' + e.message + '）→ IDで登録確認します: ID=' + taskId);
+        return verifyTaskSaved_(taskId).then(function(saved) {
+          if (saved) {
+            console.log('[addTask] 登録確認OK: ID=' + taskId + ' は保存済み（応答タイムアウトのみ・二重登録なし）');
+            return onAddConfirmed_(true); // 確認時に一覧取得済み
+          }
+          // 未登録（または確認失敗）→ 入力内容を残し、同一IDでの手動再送を可能にする
+          _pendingAddTask = { id: taskId, key: contentKey };
+          alert('通信エラーのため登録を確認できませんでした。\n入力内容はそのまま残っています。もう一度「追加」を押すと同じ管理ID(' + taskId + ')で安全に再送されます（二重登録にはなりません）。');
+        });
+      }
       alert('タスクの追加に失敗しました: ' + e.message);
     })
     .then(function() {
@@ -8223,14 +8348,20 @@
         });
       })
       .then(function() {
-        // 本日の勤務予定（必須。失敗しても継続）
-        try { loadTodayWorkAvail(); } catch(e) { console.error('[初期化] loadTodayWorkAvail エラー:', e); }
         // 一言メッセージ: 宛先を自分以外にデフォルト設定
         try {
           var myId = localStorage.getItem('myMemberId') || 'hamada';
           var toEl = document.getElementById('msg-to');
           if (toEl) toEl.value = (myId === 'hamada' ? '髙嵜' : '濱田');
         } catch(e) {}
+        // 本日の勤務予定（必須。失敗しても継続）
+        // ※ 完了を待ってから遅延トリクルへ進む＝初期表示中のGAS同時実行を実質1件に抑える
+        //   （以前はここで待ち合わせず発火していたため、遅延トリクルと並走して同時2件になっていた）
+        return Promise.resolve()
+          .then(function() { return loadTodayWorkAvail(); })
+          .catch(function(e) { console.error('[初期化] loadTodayWorkAvail エラー:', e); });
+      })
+      .then(function() {
         // ② 初期表示が済んだら、残りを順番に遅延読み込み
         runDeferredInitLoads();
       });
@@ -8529,7 +8660,8 @@
 
   function loadTodayWorkAvail() {
     var today = todayJST();
-    loadWorkAvailability('takasaki', today.substring(0, 7)).then(function() { renderTodayWorkAvail(); });
+    // Promiseを返す（初期表示チェーンが完了を待ってから次の取得に進めるように）
+    return loadWorkAvailability('takasaki', today.substring(0, 7)).then(function() { renderTodayWorkAvail(); });
   }
 
   function renderTodayWorkAvail() {

@@ -231,9 +231,23 @@ function doPost(e) {
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var nowJST = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
 
-    // IDの自動採番（TODO新規追加時）
-    if (sheetName === SHEET_TODO && !data['ID']) {
-      data['ID'] = getNextId_(sheet, headers);
+    // IDの自動採番（TODO新規追加時）／フロント採番IDが来た場合は二重登録防止チェック
+    if (sheetName === SHEET_TODO) {
+      if (!data['ID']) {
+        data['ID'] = getNextId_(sheet, headers);
+      } else {
+        // 504等でフロントが同じIDを再送してきた場合：既に保存済みなら再登録せず既存結果を返す（冪等）
+        var dupRow = findRowById_(sheet, headers, data['ID']);
+        if (dupRow !== -1) {
+          Logger.log('[doPost] ID=' + data['ID'] + ' は既に行' + dupRow + 'に登録済み → 再登録せず既存結果を返す');
+          return jsonResponse_({
+            success: true,
+            duplicate: true,
+            sheetName: sheetName,
+            writtenRow: dupRow
+          });
+        }
+      }
     }
 
     // クライアントシート: client_id・作成日時・更新日時・有効フラグを自動設定
@@ -1245,6 +1259,21 @@ function getNextId_(sheet, headers) {
     if (v > maxId) maxId = v;
   }
   return maxId + 1;
+}
+
+// ID列から一致行を探す（見つからなければ -1 を返す）。
+// 二重登録チェック用。ID列1列だけを読むため全列読み込みより軽い。
+function findRowById_(sheet, headers, id) {
+  var idCol = headers.indexOf('ID');
+  if (idCol === -1) return -1;
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+  var ids = sheet.getRange(2, idCol + 1, lastRow - 1, 1).getValues();
+  var target = String(id);
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === target) return i + 2;
+  }
+  return -1;
 }
 
 // 指定カラム名でID採番（クライアント・行政問い合わせ用）
